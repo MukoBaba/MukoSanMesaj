@@ -908,23 +908,39 @@ try{
   if(!sess){const combined=new TextEncoder().encode('room_'+rid+'_signal_room_v1');const sk=await crypto.subtle.digest('SHA-256',combined);sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'AES-256-GCM'};saveSession('room_'+rid,sess)}
   encLabel=' | E2E'}catch(e){encLabel=''}
 document.getElementById('rc-name').textContent=r.name;document.getElementById('rc-meta').textContent=(r.type==='webrtc'?'WebRTC':'Sunucu')+' - '+r.members+'/'+r.maxMembers+' kisi'+encLabel;
+// Load room messages from Firebase
+if(fbReady){try{
+  const fbChat=await fbGet('chats/room_'+rid);
+  if(fbChat&&fbChat.messages){
+    const fbMsgs=Array.isArray(fbChat.messages)?fbChat.messages:Object.values(fbChat.messages);
+    const localMs=getRMsgs(rid);
+    if(fbMsgs.length>localMs.length){saveRMsgs(rid,fbMsgs)}
+  }}catch(e){console.warn('FB load room msgs:',e)}}
 await renderRMsgs();openFS('screen-room-chat');setTimeout(()=>{document.getElementById('rc-msgs').scrollTop=999999},100);setTimeout(()=>document.getElementById('rc-inp').focus(),300);
-listenChat('room_'+curRI,async(fbMsgs)=>{const localMs=getRMsgs(curRI);if(fbMsgs.length>localMs.length){saveRMsgs(curRI,fbMsgs);await renderRMsgs();document.getElementById('rc-msgs').scrollTop=999999}})}
+listenChat('room_'+curRI,async(fbMsgs)=>{
+  if(!Array.isArray(fbMsgs))fbMsgs=Object.values(fbMsgs||{});
+  const localMs=getRMsgs(curRI);
+  if(fbMsgs.length>localMs.length){saveRMsgs(curRI,fbMsgs);
+    try{await renderRMsgs()}catch(e){}
+    document.getElementById('rc-msgs').scrollTop=999999;snd('wood')}})}}
 
 async function renderRMsgs(){if(!curRI)return;const cu=getCU(),ms=getRMsgs(curRI),c=document.getElementById('rc-msgs');
 if(!ms.length){c.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--dm);font-size:14px;text-align:center;padding:40px">Henuz mesaj yok</div>';return}
 let h='',ld='';
 for(const m of ms){const d=new Date(m.time).toLocaleDateString('tr-TR');if(d!==ld){h+='<div class="mddiv">'+d+'</div>';ld=d}
-let txt='';const isEnc=m.enc&&m.enc.encrypted;
-if(isEnc){try{txt=await decryptMsg('room_'+curRI,m.enc)}catch(e){txt='[cozulemedi]'}}else{txt=m.text||''}
+let txt='';let isEnc=false;
+if(m.text){txt=m.text}
+else if(m.enc&&m.enc.encrypted){isEnc=true;try{txt=await decryptMsg('room_'+curRI,m.enc)}catch(e){txt=m.enc.text||'[cozulemedi]'}}
+else if(m.enc&&m.enc.text){txt=m.enc.text}
+else{txt='[mesaj]'}
 const s=m.sender===cu;const lock=isEnc?'<span style="font-size:8px;color:var(--em);margin-left:4px">[E2E]</span>':'';
-h+='<div class="mrow '+(s?'s':'r')+'"><div class="mbub">'+(s?'':'<div class="msnd">'+escH(m.senderName)+'</div>')+'<div class="mtxt">'+escH(txt)+'</div><div class="mtm">'+fmtT(m.time)+lock+'</div></div></div>'}
+h+='<div class="mrow '+(s?'s':'r')+'"><div class="mbub">'+(s?'':'<div class="msnd">'+escH(m.senderName||'Kullanici')+'</div>')+'<div class="mtxt">'+escH(txt)+'</div><div class="mtm">'+fmtT(m.time)+lock+'</div></div></div>'}
 c.innerHTML=h}
 
 async function sendRM(){const inp=document.getElementById('rc-inp'),t=inp.value.trim();if(!t||!curRI)return;
 const cu=getCU(),u=getU(),sn=u[cu]?.displayName||cu;
 const encData=await encryptMsg('room_'+curRI,t);
-const ms=getRMsgs(curRI);ms.push({enc:encData,text:encData.encrypted?null:t,sender:cu,senderName:sn,time:Date.now()});saveRMsgs(curRI,ms);
+const ms=getRMsgs(curRI);ms.push({enc:encData,text:t,sender:cu,senderName:sn,time:Date.now()});saveRMsgs(curRI,ms);
 syncMsgToFB('room_'+curRI,ms);
 // Notify room members (simplified — notify room creator)
 const room=getRooms().find(r=>r.id===curRI);if(room&&room.createdBy!==cu)sendPushNotification(room.createdBy,sn+' ('+room.name+')',t.substring(0,50));
@@ -932,7 +948,20 @@ inp.value='';inp.style.height='auto';snd('click');await renderRMsgs();document.g
 
 // ===== DM =====
 let curDMU=null,curDMC=null;
-function openDMList(){snd('diamond');const cu=getCU();if(!cu){alert('Once giris yap!');return}renderDL();openFS('screen-dm-list')}
+async function openDMList(){snd('diamond');const cu=getCU();if(!cu){alert('Once giris yap!');return}
+// Load DM list from Firebase
+if(fbReady){try{
+  const safeId=cu.replace('#','u_');
+  const fbDmList=await fbGet('dmLists/'+safeId);
+  if(fbDmList&&fbDmList.chats){
+    const dm=getDMs();
+    const local=dm[cu]||{};
+    const fb=fbDmList.chats;
+    // Merge: take newer entries
+    Object.keys(fb).forEach(cid=>{
+      if(!local[cid]||(fb[cid].lastTime||0)>(local[cid].lastTime||0)){local[cid]=fb[cid]}});
+    dm[cu]=local;saveDMs(dm)}}catch(e){console.warn('FB load DM list:',e)}}
+renderDL();openFS('screen-dm-list')}
 function renderDL(){const cu=getCU(),dm=getDMs(),ud=dm[cu]||{},c=document.getElementById('d-list'),e=document.getElementById('d-empty');
 const ent=Object.entries(ud).sort((a,b)=>(b[1].lastTime||0)-(a[1].lastTime||0));
 if(!ent.length){c.style.display='none';e.style.display='flex';return}c.style.display='block';e.style.display='none';
@@ -974,6 +1003,14 @@ try{const sess=await establishSession(cu,oid);sessInfo=sess.algorithm||'E2E'}cat
 let onlineStr='Offline';
 if(fbReady){try{const fbU=await fbGetUser(oid);if(fbU&&fbU.online)onlineStr='Online'}catch(e){}}
 se.textContent=onlineStr+' | '+sessInfo;se.className='chstat '+(onlineStr==='Online'?'on':'off');
+// Load messages from Firebase if local is empty or outdated
+if(fbReady){try{
+  const fbChat=await fbGet('chats/'+curDMC);
+  if(fbChat&&fbChat.messages){
+    const fbMsgs=Array.isArray(fbChat.messages)?fbChat.messages:Object.values(fbChat.messages);
+    const localMs=getMsgs(curDMC);
+    if(fbMsgs.length>localMs.length){saveMsgs(curDMC,fbMsgs)}
+  }}catch(e){console.warn('FB load msgs:',e)}}
 const dm=getDMs();if(dm[cu]&&dm[cu][curDMC]){dm[cu][curDMC].unread=0;saveDMs(dm);updBadge()}
 await renderDMsgs();openFS('screen-dm-chat');setTimeout(()=>{document.getElementById('dc-msgs').scrollTop=999999},100);setTimeout(()=>document.getElementById('dc-inp').focus(),300);
 // Real-time listener for incoming messages
@@ -1013,7 +1050,7 @@ const encData=await encryptMsg(curDMC,t);
 const ms=getMsgs(curDMC);ms.push({enc:encData,text:t,sender:cu,senderName:sn,time:Date.now()});saveMsgs(curDMC,ms);
 const dm=getDMs();if(!dm[cu])dm[cu]={};dm[cu][curDMC]={otherId:curDMU.id,otherName:curDMU.name,lastMsg:encData.encrypted?'[sifreli mesaj]':t.substring(0,30),lastTime:Date.now(),unread:0};
 if(!dm[curDMU.id])dm[curDMU.id]={};const ex=dm[curDMU.id][curDMC]||{};dm[curDMU.id][curDMC]={otherId:cu,otherName:sn,lastMsg:encData.encrypted?'[sifreli mesaj]':t.substring(0,30),lastTime:Date.now(),unread:(ex.unread||0)+1};saveDMs(dm);
-syncMsgToFB(curDMC,ms);syncDMListToFB(cu,dm[cu]);
+syncMsgToFB(curDMC,ms);syncDMListToFB(cu,dm[cu]);syncDMListToFB(curDMU.id,dm[curDMU.id]||{});
 sendPushNotification(curDMU.id,sn+' mesaj gonderdi',t.substring(0,50));
 inp.value='';inp.style.height='auto';snd('click');await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999;
 }catch(e){console.warn('sendDM error:',e);
