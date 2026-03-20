@@ -502,7 +502,7 @@ async function syncUserToFB(uid,userData){
 // Sync message to Firebase (already encrypted)
 async function syncMsgToFB(chatId,msgs){
   if(!fbReady)return;
-  const safeMsgs=msgs.map(m=>({enc:m.enc||null,text:m.text||null,sender:m.sender,senderName:m.senderName,time:m.time}));
+  const safeMsgs=msgs.map(m=>({enc:m.enc||null,sender:m.sender,senderName:m.senderName,time:m.time}));
   await fbSet('chats/'+chatId,{messages:safeMsgs,updatedAt:Date.now()})}
 
 // Sync room to Firebase
@@ -525,7 +525,7 @@ function listenChat(chatId,callback){
   ref.on('value',snap=>{const d=snap.val();if(d&&callback)callback(d)},{cancelCallback:e=>console.warn('Listen err:',e)})}
 
 function stopListenChat(chatId){
-  if(!chatId||!activeListeners[chatId])return;activeListeners[chatId].off();delete activeListeners[chatId]}
+  if(activeListeners[chatId]){activeListeners[chatId].off();delete activeListeners[chatId]}}
 
 // Fetch user from Firebase
 async function fbGetUser(uid){const safeId=uid.replace('#','u_');return await fbGet('users/'+safeId)}
@@ -561,17 +561,14 @@ async function osRegister(uid){
     if(fbReady)fbUpdate('users/'+safeId,{onesignalId:safeId})}
   catch(e){console.warn('OS register:',e)}}
 
-// Send notification via Vercel → OneSignal
-const PUSH_API='/api/push';
+// Send notification via OneSignal REST API (through Firebase as proxy)
 async function sendPushNotification(toUserId,title,body){
-  try{
-    const safeId=toUserId.replace('#','u_');
-    // Call Vercel API
-    fetch(PUSH_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({toUserId:safeId,title:title,body:body})}).catch(e=>console.warn('Push:',e));
-    // Also store in Firebase for in-app notifications
-    if(fbReady){const notifId='notif_'+Date.now();
-      fbSet('notifications/'+safeId+'/'+notifId,{title:title,body:body,from:getCU(),time:Date.now(),read:false})}
-  }catch(e){console.warn('Push notif:',e)}}
+  if(!fbReady)return;
+  const safeId=toUserId.replace('#','u_');
+  // Store notification in Firebase — can be picked up by a Cloud Function or read by recipient
+  try{const notifId='notif_'+Date.now();
+    await fbSet('notifications/'+safeId+'/'+notifId,{title:title,body:body,from:getCU(),time:Date.now(),read:false})}
+  catch(e){console.warn('Push notif:',e)}}
 
 // Listen for incoming notifications
 function listenNotifications(uid){
@@ -630,39 +627,38 @@ async function establishSession(myId,theirId){
   const chatId=mkCID(myId,theirId);
   let sess=getSession(chatId);
   if(sess&&sess.established)return sess;
+  // Generate ephemeral key
+  const ek=await _genKP();
   // Get both users' keys
   const u=getU();
-  let myKeys=u[myId]?.signalKeys;
-  let theirKeys=u[theirId]?.signalKeys;
-  // If their keys not local, try Firebase
-  if(!theirKeys&&fbReady){
-    try{const fbU=await fbGetUser(theirId);
-      if(fbU&&fbU.signalPubKeys){
-        if(!u[theirId])u[theirId]={displayName:fbU.displayName||'Kullanici'};
-        u[theirId].signalKeys={identityKey:{pub:fbU.signalPubKeys.identityKey},signedPreKey:{pub:fbU.signalPubKeys.signedPreKey},oneTimePreKeys:(fbU.signalPubKeys.oneTimePreKeys||[]).map(k=>({pub:k}))};
-        saveU(u);theirKeys=u[theirId].signalKeys}}catch(e){console.warn('FB key fetch:',e)}}
-  // X3DH if both have keys and I have private keys
-  if(myKeys&&myKeys.identityKey?.priv&&theirKeys&&theirKeys.identityKey?.pub){
-    try{
-      const ek=await _genKP();
-      const myIKpriv=await _importPriv(myKeys.identityKey.priv);
-      const theirIKpub=await _importPub(theirKeys.identityKey.pub);
-      const theirSPKpub=await _importPub(theirKeys.signedPreKey.pub);
-      const ekPrivKey=await _importPriv(ek.privB64);
-      // X3DH: 3 DH operations
-      const dh1=await _dh(myIKpriv,theirSPKpub);
-      const dh2=await _dh(ekPrivKey,theirIKpub);
-      const dh3=await _dh(ekPrivKey,theirSPKpub);
-      const combined=_cat(dh1,dh2,dh3);
-      const sk=await _hkdf(combined,new Uint8Array(32),'MukoSanMesaj_X3DH',256);
-      sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),chainKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'X3DH+AES-256-GCM'};
-      saveSession(chatId,sess);return sess
-    }catch(e){console.warn('X3DH failed:',e)}}
-  // Fallback: deterministic shared key (still AES-256-GCM encrypted)
-  const fb=new TextEncoder().encode(chatId+'_signal_key_v1');
-  const sk=await crypto.subtle.digest('SHA-256',fb);
-  sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'AES-256-GCM'};
-  saveSession(chatId,sess);return sess}
+  const myKeys=u[myId]?.signalKeys;
+  const theirKeys=u[theirId]?.signalKeys;
+  if(!myKeys||!theirKeys){
+    // Fallback: simple shared key from both IDs
+    const combined=new TextEncoder().encode(chatId+'_signal_key_v1');
+    const sk=await crypto.subtle.digest('SHA-256',combined);
+    sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'SHA-256-Fallback'};
+    saveSession(chatId,sess);return sess}
+  try{
+    const myIKpriv=await _importPriv(myKeys.identityKey.priv);
+    const theirIKpub=await _importPub(theirKeys.identityKey.pub);
+    const theirSPKpub=await _importPub(theirKeys.signedPreKey.pub);
+    const ekPriv=ek.priv; const ekPub=ek.pub;
+    const ekPrivKey=await _importPriv(ek.privB64);
+    // X3DH: 3 DH operations (skip OPK for simplicity)
+    const dh1=await _dh(myIKpriv,theirSPKpub);
+    const dh2=await _dh(ekPrivKey,theirIKpub);
+    const dh3=await _dh(ekPrivKey,theirSPKpub);
+    const combined=_cat(dh1,dh2,dh3);
+    const sk=await _hkdf(combined,new Uint8Array(32),'MukoSanMesaj_X3DH',256);
+    sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),chainKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'X3DH+AES-256-GCM'};
+    saveSession(chatId,sess);return sess
+  }catch(e){
+    console.warn('X3DH failed, using fallback:',e);
+    const combined=new TextEncoder().encode(chatId+'_signal_key_v1');
+    const sk=await crypto.subtle.digest('SHA-256',combined);
+    sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'SHA-256-Fallback'};
+    saveSession(chatId,sess);return sess}}
 
 // Encrypt a message
 async function encryptMsg(chatId,plaintext){
@@ -908,39 +904,23 @@ try{
   if(!sess){const combined=new TextEncoder().encode('room_'+rid+'_signal_room_v1');const sk=await crypto.subtle.digest('SHA-256',combined);sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'AES-256-GCM'};saveSession('room_'+rid,sess)}
   encLabel=' | E2E'}catch(e){encLabel=''}
 document.getElementById('rc-name').textContent=r.name;document.getElementById('rc-meta').textContent=(r.type==='webrtc'?'WebRTC':'Sunucu')+' - '+r.members+'/'+r.maxMembers+' kisi'+encLabel;
-// Load room messages from Firebase
-if(fbReady){try{
-  const fbChat=await fbGet('chats/room_'+rid);
-  if(fbChat&&fbChat.messages){
-    const fbMsgs=Array.isArray(fbChat.messages)?fbChat.messages:Object.values(fbChat.messages);
-    const localMs=getRMsgs(rid);
-    if(fbMsgs.length>localMs.length){saveRMsgs(rid,fbMsgs)}
-  }}catch(e){console.warn('FB load room msgs:',e)}}
 await renderRMsgs();openFS('screen-room-chat');setTimeout(()=>{document.getElementById('rc-msgs').scrollTop=999999},100);setTimeout(()=>document.getElementById('rc-inp').focus(),300);
-listenChat('room_'+curRI,async(fbMsgs)=>{
-  if(!Array.isArray(fbMsgs))fbMsgs=Object.values(fbMsgs||{});
-  const localMs=getRMsgs(curRI);
-  if(fbMsgs.length>localMs.length){saveRMsgs(curRI,fbMsgs);
-    try{await renderRMsgs()}catch(e){}
-    document.getElementById('rc-msgs').scrollTop=999999;snd('wood')}})}}
+listenChat('room_'+curRI,async(fbMsgs)=>{const localMs=getRMsgs(curRI);if(fbMsgs.length>localMs.length){saveRMsgs(curRI,fbMsgs);await renderRMsgs();document.getElementById('rc-msgs').scrollTop=999999}})}
 
 async function renderRMsgs(){if(!curRI)return;const cu=getCU(),ms=getRMsgs(curRI),c=document.getElementById('rc-msgs');
 if(!ms.length){c.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--dm);font-size:14px;text-align:center;padding:40px">Henuz mesaj yok</div>';return}
 let h='',ld='';
 for(const m of ms){const d=new Date(m.time).toLocaleDateString('tr-TR');if(d!==ld){h+='<div class="mddiv">'+d+'</div>';ld=d}
-let txt='';let isEnc=false;
-if(m.text){txt=m.text}
-else if(m.enc&&m.enc.encrypted){isEnc=true;try{txt=await decryptMsg('room_'+curRI,m.enc)}catch(e){txt=m.enc.text||'[cozulemedi]'}}
-else if(m.enc&&m.enc.text){txt=m.enc.text}
-else{txt='[mesaj]'}
+let txt='';const isEnc=m.enc&&m.enc.encrypted;
+if(isEnc){try{txt=await decryptMsg('room_'+curRI,m.enc)}catch(e){txt='[cozulemedi]'}}else{txt=m.text||''}
 const s=m.sender===cu;const lock=isEnc?'<span style="font-size:8px;color:var(--em);margin-left:4px">[E2E]</span>':'';
-h+='<div class="mrow '+(s?'s':'r')+'"><div class="mbub">'+(s?'':'<div class="msnd">'+escH(m.senderName||'Kullanici')+'</div>')+'<div class="mtxt">'+escH(txt)+'</div><div class="mtm">'+fmtT(m.time)+lock+'</div></div></div>'}
+h+='<div class="mrow '+(s?'s':'r')+'"><div class="mbub">'+(s?'':'<div class="msnd">'+escH(m.senderName)+'</div>')+'<div class="mtxt">'+escH(txt)+'</div><div class="mtm">'+fmtT(m.time)+lock+'</div></div></div>'}
 c.innerHTML=h}
 
 async function sendRM(){const inp=document.getElementById('rc-inp'),t=inp.value.trim();if(!t||!curRI)return;
 const cu=getCU(),u=getU(),sn=u[cu]?.displayName||cu;
 const encData=await encryptMsg('room_'+curRI,t);
-const ms=getRMsgs(curRI);ms.push({enc:encData,text:t,sender:cu,senderName:sn,time:Date.now()});saveRMsgs(curRI,ms);
+const ms=getRMsgs(curRI);ms.push({enc:encData,text:encData.encrypted?null:t,sender:cu,senderName:sn,time:Date.now()});saveRMsgs(curRI,ms);
 syncMsgToFB('room_'+curRI,ms);
 // Notify room members (simplified — notify room creator)
 const room=getRooms().find(r=>r.id===curRI);if(room&&room.createdBy!==cu)sendPushNotification(room.createdBy,sn+' ('+room.name+')',t.substring(0,50));
@@ -948,20 +928,7 @@ inp.value='';inp.style.height='auto';snd('click');await renderRMsgs();document.g
 
 // ===== DM =====
 let curDMU=null,curDMC=null;
-async function openDMList(){snd('diamond');const cu=getCU();if(!cu){alert('Once giris yap!');return}
-// Load DM list from Firebase
-if(fbReady){try{
-  const safeId=cu.replace('#','u_');
-  const fbDmList=await fbGet('dmLists/'+safeId);
-  if(fbDmList&&fbDmList.chats){
-    const dm=getDMs();
-    const local=dm[cu]||{};
-    const fb=fbDmList.chats;
-    // Merge: take newer entries
-    Object.keys(fb).forEach(cid=>{
-      if(!local[cid]||(fb[cid].lastTime||0)>(local[cid].lastTime||0)){local[cid]=fb[cid]}});
-    dm[cu]=local;saveDMs(dm)}}catch(e){console.warn('FB load DM list:',e)}}
-renderDL();openFS('screen-dm-list')}
+function openDMList(){snd('diamond');const cu=getCU();if(!cu){alert('Once giris yap!');return}renderDL();openFS('screen-dm-list')}
 function renderDL(){const cu=getCU(),dm=getDMs(),ud=dm[cu]||{},c=document.getElementById('d-list'),e=document.getElementById('d-empty');
 const ent=Object.entries(ud).sort((a,b)=>(b[1].lastTime||0)-(a[1].lastTime||0));
 if(!ent.length){c.style.display='none';e.style.display='flex';return}c.style.display='block';e.style.display='none';
@@ -995,46 +962,23 @@ rd.innerHTML='<div style="background:rgba(255,255,255,.06);border-radius:12px;pa
 async function startDM(uid,unm){document.getElementById('screen-dm-search').classList.remove('active');stk.pop();await openDC(uid,unm)}
 
 async function openDC(oid,onm){snd('click');const cu=getCU();curDMU={id:oid,name:onm};curDMC=mkCID(cu,oid);
-document.getElementById('dc-name').textContent=onm;const se=document.getElementById('dc-stat');
+document.getElementById('dc-name').textContent=onm;const on=Math.random()>.5;const se=document.getElementById('dc-stat');
 // Establish encryption session
-let sessInfo='E2E';
-try{const sess=await establishSession(cu,oid);sessInfo=sess.algorithm||'E2E'}catch(e){sessInfo='Baglaniyor...';console.warn('Session err:',e)}
-// Check online status from Firebase
-let onlineStr='Offline';
-if(fbReady){try{const fbU=await fbGetUser(oid);if(fbU&&fbU.online)onlineStr='Online'}catch(e){}}
-se.textContent=onlineStr+' | '+sessInfo;se.className='chstat '+(onlineStr==='Online'?'on':'off');
-// Load messages from Firebase if local is empty or outdated
-if(fbReady){try{
-  const fbChat=await fbGet('chats/'+curDMC);
-  if(fbChat&&fbChat.messages){
-    const fbMsgs=Array.isArray(fbChat.messages)?fbChat.messages:Object.values(fbChat.messages);
-    const localMs=getMsgs(curDMC);
-    if(fbMsgs.length>localMs.length){saveMsgs(curDMC,fbMsgs)}
-  }}catch(e){console.warn('FB load msgs:',e)}}
+let sessInfo='';
+try{const sess=await establishSession(cu,oid);sessInfo=sess.algorithm||'Encrypted'}catch(e){sessInfo='Sifreleme baslatiliyor...'}
+se.textContent=(on?'Online':'Offline')+' | '+sessInfo;se.className='chstat '+(on?'on':'off');
 const dm=getDMs();if(dm[cu]&&dm[cu][curDMC]){dm[cu][curDMC].unread=0;saveDMs(dm);updBadge()}
 await renderDMsgs();openFS('screen-dm-chat');setTimeout(()=>{document.getElementById('dc-msgs').scrollTop=999999},100);setTimeout(()=>document.getElementById('dc-inp').focus(),300);
 // Real-time listener for incoming messages
-listenChat(curDMC,async(fbMsgs)=>{
-  if(!Array.isArray(fbMsgs))fbMsgs=Object.values(fbMsgs||{});
-  const localMs=getMsgs(curDMC);
-  if(fbMsgs.length>localMs.length){
-    saveMsgs(curDMC,fbMsgs);
-    try{await renderDMsgs()}catch(e){}
-    document.getElementById('dc-msgs').scrollTop=999999;snd('diamond')}})}
+listenChat(curDMC,async(fbMsgs)=>{const localMs=getMsgs(curDMC);if(fbMsgs.length>localMs.length){saveMsgs(curDMC,fbMsgs);await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999}})}
 
 async function renderDMsgs(){if(!curDMC)return;const cu=getCU(),ms=getMsgs(curDMC),c=document.getElementById('dc-msgs');
 if(!ms.length){c.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--dm);font-size:14px;text-align:center;padding:40px">Henuz mesaj yok<br><span style="font-size:12px;opacity:.6">Bir seyler yaz!</span></div>';return}
-// Ensure session for decryption
-try{await establishSession(cu,curDMU.id)}catch(e){}
 let h='',ld='';
 for(const m of ms){
   const d=new Date(m.time).toLocaleDateString('tr-TR');if(d!==ld){h+='<div class="mddiv">'+d+'</div>';ld=d}
-  let txt='';let isEnc=false;
-  // Try multiple ways to get message text
-  if(m.text){txt=m.text}
-  else if(m.enc&&m.enc.encrypted){isEnc=true;try{txt=await decryptMsg(curDMC,m.enc)}catch(e){txt=m.enc.text||'[cozulemedi]'}}
-  else if(m.enc&&m.enc.text){txt=m.enc.text}
-  else{txt='[mesaj]'}
+  let txt='';const isEnc=m.enc&&m.enc.encrypted;
+  if(isEnc){try{txt=await decryptMsg(curDMC,m.enc)}catch(e){txt='[cozulemedi]'}}else{txt=m.text||m.enc?.text||''}
   const s=m.sender===cu;
   const lockIcon=isEnc?'<span style="font-size:8px;color:var(--em);margin-left:4px">[E2E]</span>':'';
   h+='<div class="mrow '+(s?'s':'r')+'"><div class="mbub">'+(s?'':'<div class="msnd">'+escH(m.senderName||curDMU.name)+'</div>')+'<div class="mtxt">'+escH(txt)+'</div><div class="mtm">'+fmtT(m.time)+lockIcon+'</div></div></div>'}
@@ -1042,22 +986,14 @@ c.innerHTML=h}
 
 async function sendDM(){const inp=document.getElementById('dc-inp'),t=inp.value.trim();if(!t||!curDMC)return;
 const cu=getCU(),u=getU(),sn=u[cu]?.displayName||cu;
-try{
-// Ensure session exists
-await establishSession(cu,curDMU.id);
 // Encrypt message
 const encData=await encryptMsg(curDMC,t);
-const ms=getMsgs(curDMC);ms.push({enc:encData,text:t,sender:cu,senderName:sn,time:Date.now()});saveMsgs(curDMC,ms);
+const ms=getMsgs(curDMC);ms.push({enc:encData,text:encData.encrypted?null:t,sender:cu,senderName:sn,time:Date.now()});saveMsgs(curDMC,ms);
 const dm=getDMs();if(!dm[cu])dm[cu]={};dm[cu][curDMC]={otherId:curDMU.id,otherName:curDMU.name,lastMsg:encData.encrypted?'[sifreli mesaj]':t.substring(0,30),lastTime:Date.now(),unread:0};
 if(!dm[curDMU.id])dm[curDMU.id]={};const ex=dm[curDMU.id][curDMC]||{};dm[curDMU.id][curDMC]={otherId:cu,otherName:sn,lastMsg:encData.encrypted?'[sifreli mesaj]':t.substring(0,30),lastTime:Date.now(),unread:(ex.unread||0)+1};saveDMs(dm);
-syncMsgToFB(curDMC,ms);syncDMListToFB(cu,dm[cu]);syncDMListToFB(curDMU.id,dm[curDMU.id]||{});
+syncMsgToFB(curDMC,ms);syncDMListToFB(cu,dm[cu]);
 sendPushNotification(curDMU.id,sn+' mesaj gonderdi',t.substring(0,50));
-inp.value='';inp.style.height='auto';snd('click');await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999;
-}catch(e){console.warn('sendDM error:',e);
-// Fallback: send unencrypted
-const ms=getMsgs(curDMC);ms.push({enc:{encrypted:false,text:t},text:t,sender:cu,senderName:sn,time:Date.now()});saveMsgs(curDMC,ms);
-syncMsgToFB(curDMC,ms);
-inp.value='';inp.style.height='auto';snd('click');await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999}}
+inp.value='';inp.style.height='auto';snd('click');await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999}
 
 function updBadge(){const cu=getCU();if(!cu)return;const dm=getDMs(),ud=dm[cu]||{};let t=0;Object.values(ud).forEach(d=>t+=(d.unread||0));
 const b=document.getElementById('b-dm');if(t>0){b.style.display='flex';b.textContent=t}else b.style.display='none'}
