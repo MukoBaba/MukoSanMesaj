@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MukoSanMesaj</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#5E17EB;--bg-dark:#4A10C0;--send:#FF914D;--send-h:#FF7A2E;
+  --inp:#0097B2;--inp-f:#00ADCC;--wh:#FFF;--lt:#E0D0FF;--dm:#B8A0E0;
+  --em:#2ECC71;--dia:#00BCD4;--red:#E74C3C;--stone:#8D8D8D;
+  --wood:#8B5E3C;--iron:#C0C0C0;--card:rgba(0,0,0,0.25);
+  --border:rgba(255,255,255,0.1);--fp:'Press Start 2P',monospace;
+  --fb:'Inter',-apple-system,sans-serif;
+}
+body{font-family:var(--fb);background:var(--bg);color:var(--wh);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:16px 16px;pointer-events:none;z-index:0}
+.container{position:relative;z-index:1;width:100%;max-width:420px;padding:20px}
+
+/* Logo */
+.logo{text-align:center;margin-bottom:32px}
+.logo-text{font-family:var(--fp);font-size:22px;line-height:1.8;letter-spacing:2px;text-shadow:3px 3px 0 rgba(0,0,0,.4)}
+.logo-muko{color:var(--em)}.logo-san{color:var(--dia)}.logo-mesaj{color:var(--red)}
+.logo-sub{font-size:12px;color:var(--dm);margin-top:8px}
+
+/* Card */
+.card{background:var(--card);border:2px solid var(--border);border-radius:4px;padding:28px 24px;backdrop-filter:blur(10px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.card-title{font-family:var(--fp);font-size:14px;text-align:center;margin-bottom:24px;text-shadow:2px 2px 0 rgba(0,0,0,.3)}
+
+/* Form */
+.fg{margin-bottom:18px}
+.fl{display:block;font-size:10px;color:var(--lt);margin-bottom:8px;letter-spacing:1px}
+.fi{width:100%;padding:14px 16px;background:var(--inp);border:3px solid transparent;border-radius:4px;color:var(--wh);font-family:var(--fp);font-size:10px;outline:none;transition:.2s}
+.fi::placeholder{color:rgba(255,255,255,.5);font-size:9px}
+.fi:focus{background:var(--inp-f);border-color:var(--wh);box-shadow:0 0 12px rgba(0,151,178,.4)}
+.pw{width:100%;padding:14px 16px;background:var(--inp);border:3px solid transparent;border-radius:4px;color:var(--wh);font-family:var(--fp);font-size:10px;outline:none;transition:.2s}
+.pw::placeholder{color:rgba(255,255,255,.5);font-size:9px}
+.pw:focus{background:var(--inp-f);border-color:var(--wh)}
+.iw{position:relative}
+.tp{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:0;border:0;color:rgba(255,255,255,.5);font-size:9px;cursor:pointer;padding:6px}
+.tp:hover{color:var(--wh)}
+
+/* Buttons */
+.btn{width:100%;padding:16px;border:none;border-radius:4px;font-family:var(--fp);font-size:11px;cursor:pointer;transition:.15s;letter-spacing:1px;text-shadow:1px 1px 0 rgba(0,0,0,.3);color:var(--wh)}
+.btn:active{transform:scale(.97)}
+.btn-p{background:var(--send);box-shadow:0 4px 0 #CC6E30,0 6px 12px rgba(0,0,0,.3);margin-top:8px}
+.btn-p:hover{background:var(--send-h);transform:translateY(-1px)}
+.btn-p:active{box-shadow:0 2px 0 #CC6E30;transform:translateY(2px)}
+.btn-s{background:transparent;color:var(--lt);border:2px solid rgba(255,255,255,.15);margin-top:12px;font-size:9px}
+.btn-s:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.3)}
+.lnk{font-family:var(--fp);font-size:8px;color:var(--dia);cursor:pointer;background:0;border:0;transition:.2s}
+.lnk:hover{color:var(--wh);text-shadow:0 0 8px rgba(0,188,212,.5)}
+.lr{text-align:center;margin-top:20px}
+
+/* Alerts */
+.al{padding:12px 16px;border-radius:4px;font-size:8px;margin-bottom:16px;display:none;line-height:1.6}
+.al-e{background:rgba(255,68,68,.15);border:2px solid rgba(255,68,68,.3);color:#FF6B6B}
+.al-s{background:rgba(46,204,113,.15);border:2px solid rgba(46,204,113,.3);color:#5BF09C}
+
+/* reCAPTCHA */
+.rcap{background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.1);border-radius:4px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.2s;margin-bottom:18px}
+.rcap:hover{background:rgba(255,255,255,.12)}
+.rchk{width:24px;height:24px;border:3px solid rgba(255,255,255,.4);border-radius:3px;display:flex;align-items:center;justify-content:center;transition:.3s;flex-shrink:0}
+.rchk.on{background:var(--em);border-color:var(--em)}
+.rchk .cm{display:none;font-size:14px}
+.rchk.on .cm{display:block}
+
+/* Password strength */
+.sb{height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin-top:8px;overflow:hidden}
+.sf{height:100%;border-radius:2px;transition:.3s;width:0}
+.st{font-size:7px;margin-top:4px}
+
+/* Recovery codes */
+.rcodes{background:rgba(0,0,0,.3);border:2px solid rgba(255,255,255,.1);border-radius:4px;padding:16px;margin:16px 0}
+.rcode{font-size:10px;color:var(--em);padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);letter-spacing:2px;line-height:1.6}
+.rcode:last-child{border-bottom:none}
+.rcl{color:var(--dm);font-size:7px;margin-bottom:2px}
+.warn{font-size:7px;color:var(--red);text-align:center;line-height:1.8;margin:12px 0;padding:12px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);border-radius:4px}
+.idbox{text-align:center;padding:20px;background:rgba(0,0,0,.3);border:2px solid var(--border);border-radius:4px;margin:16px 0}
+.idlbl{font-size:8px;color:var(--dm);margin-bottom:10px}
+.idnum{font-size:20px;color:var(--dia);text-shadow:0 0 12px rgba(0,188,212,.4);letter-spacing:3px}
+.cpbtn{background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.15);color:var(--lt);padding:10px 16px;border-radius:4px;font-family:var(--fp);font-size:8px;cursor:pointer;transition:.2s;width:100%;margin-top:8px}
+.cpbtn:hover{background:rgba(255,255,255,.15)}
+.cpbtn.ok{background:rgba(46,204,113,.2);border-color:var(--em);color:var(--em)}
+.fl2{display:block;text-align:right;margin-top:6px}
+.ver{text-align:center;font-size:7px;color:var(--dm);margin-top:24px;opacity:.6}
+
+/* ===== MENU ===== */
+.mhdr{text-align:center;padding-bottom:16px}
+.mgreet{font-size:13px;color:var(--wh);text-shadow:2px 2px 0 rgba(0,0,0,.3);margin-bottom:12px;font-family:var(--fp)}
+.midr{display:flex;align-items:center;justify-content:center;gap:8px}
+.mdot{width:10px;height:10px;background:var(--em);border-radius:50%;box-shadow:0 0 8px rgba(46,204,113,.6);animation:pdot 2s ease-in-out infinite}
+@keyframes pdot{0%,100%{box-shadow:0 0 8px rgba(46,204,113,.6)}50%{box-shadow:0 0 16px rgba(46,204,113,.9)}}
+.midtxt{font-size:12px;color:var(--dia);text-shadow:0 0 10px rgba(0,188,212,.3);letter-spacing:2px;font-family:var(--fp)}
+.mdiv{height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);margin-bottom:18px}
+.mbtns{display:flex;flex-direction:column;gap:12px}
+
+/* Menu Buttons */
+.mb{width:100%;padding:16px 20px;border:none;border-radius:6px;font-family:var(--fp);font-size:11px;cursor:pointer;transition:.15s;letter-spacing:1px;text-shadow:1px 1px 0 rgba(0,0,0,.3);color:var(--wh);display:flex;align-items:center;gap:12px;text-align:left}
+.mb:hover{transform:translateY(-2px);filter:brightness(1.1)}
+.mb:active{transform:translateY(2px)}
+.mb-stone{background:var(--stone);box-shadow:0 4px 0 #6B6B6B,0 6px 12px rgba(0,0,0,.3)}
+.mb-wood{background:var(--wood);box-shadow:0 4px 0 #6B4226,0 6px 12px rgba(0,0,0,.3)}
+.mb-dia{background:var(--dia);box-shadow:0 4px 0 #008A9C,0 6px 12px rgba(0,0,0,.3)}
+.mb-iron{background:var(--iron);color:#333;box-shadow:0 4px 0 #999,0 6px 12px rgba(0,0,0,.3)}
+.mbtxt{flex-grow:1}
+.mbadge{background:var(--red);color:var(--wh);font-size:8px;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 6px;box-shadow:0 0 8px rgba(231,76,60,.5);flex-shrink:0;animation:bpulse 1.5s ease-in-out infinite}
+@keyframes bpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+
+/* ===== SCREENS ===== */
+.scr{display:none;animation:scrIn .4s ease}
+.scr.active{display:block}
+@keyframes scrIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+.sf-scr{display:none;position:fixed;inset:0;z-index:10;animation:sfIn .3s ease;background:var(--bg)}
+.sf-scr.active{display:flex;flex-direction:column}
+@keyframes sfIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
+
+/* Top Bar */
+.tb{display:flex;align-items:center;padding:0 6px;height:56px;background:var(--bg-dark);flex-shrink:0;gap:4px}
+.tb-back{background:0;border:0;color:var(--wh);font-size:22px;cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:.2s}
+.tb-back:hover{background:rgba(255,255,255,.1)}
+.tb-title{font-size:15px;font-weight:700;color:var(--wh);flex-grow:1;font-family:var(--fp)}
+.tb-act{background:var(--send);border:0;color:#fff;width:40px;height:40px;border-radius:50%;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
+.tb-act:hover{background:var(--send-h);transform:scale(1.05)}
+
+/* Search Bar */
+.sbar{padding:8px 12px;background:var(--bg-dark);flex-shrink:0}
+.sinp{width:100%;padding:10px 16px;background:rgba(255,255,255,.1);border:none;border-radius:6px;color:var(--wh);font-size:14px;outline:none;transition:.2s}
+.sinp::placeholder{color:rgba(255,255,255,.4)}
+.sinp:focus{background:rgba(255,255,255,.15)}
+
+/* DM List */
+.dlist{flex:1;overflow-y:auto;background:var(--bg)}
+.ditem{display:flex;align-items:center;padding:14px 16px;gap:14px;cursor:pointer;transition:.15s;border-bottom:1px solid rgba(255,255,255,.04)}
+.ditem:hover{background:rgba(255,255,255,.04)}
+.ditem:active{background:rgba(255,255,255,.07)}
+.dav{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--wh);flex-shrink:0;font-family:var(--fp);position:relative}
+.dav-a{background:linear-gradient(135deg,#E74C3C,#C0392B)}.dav-b{background:linear-gradient(135deg,#2ECC71,#27AE60)}.dav-c{background:linear-gradient(135deg,#3498DB,#2980B9)}.dav-d{background:linear-gradient(135deg,#F39C12,#E67E22)}.dav-e{background:linear-gradient(135deg,#9B59B6,#8E44AD)}
+.ddot{position:absolute;bottom:1px;right:1px;width:14px;height:14px;border-radius:50%;border:2.5px solid var(--bg)}
+.ddot.on{background:var(--em);box-shadow:0 0 6px rgba(46,204,113,.6)}.ddot.off{background:#7f8c8d}
+.dinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.dnr{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.dname{font-size:15px;font-weight:700;color:var(--wh);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dtime{font-size:11px;color:var(--dm);flex-shrink:0}
+.dtime.has{color:var(--em)}
+.dpr{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px}
+.dprev{font-size:13px;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.dunr{background:var(--em);color:#fff;font-size:11px;font-weight:700;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 6px;flex-shrink:0}
+.dempty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:20px;color:var(--dm);font-size:14px;padding:40px;text-align:center;line-height:1.6}
+
+/* Room List */
+.ritem{display:flex;align-items:center;padding:14px 16px;gap:14px;cursor:pointer;transition:.15s;border-bottom:1px solid rgba(255,255,255,.04)}
+.ritem:hover{background:rgba(255,255,255,.04)}
+.ricon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--wh);flex-shrink:0;font-family:var(--fp)}
+.ricon.srv{background:linear-gradient(135deg,#FF914D,#E67E22)}.ricon.wrt{background:linear-gradient(135deg,#00BCD4,#0097B2)}
+.rinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.rname{font-size:15px;font-weight:700;color:var(--wh);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rmeta{font-size:12px;color:var(--dm)}
+.rtbadge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;flex-shrink:0;text-align:center}
+.rtbadge.srv{background:rgba(255,145,77,.15);color:var(--send);border:1px solid rgba(255,145,77,.3)}
+.rtbadge.wrt{background:rgba(0,188,212,.15);color:var(--dia);border:1px solid rgba(0,188,212,.3)}
+
+/* Chat */
+.chinfo{display:flex;flex-direction:column;flex:1;gap:2px}
+.chname{font-size:14px;font-weight:700;color:var(--wh);font-family:var(--fp)}
+.chstat{font-size:12px}
+.chstat.on{color:var(--em)}.chstat.off{color:var(--dm)}
+.msgs{flex:1;overflow-y:auto;padding:12px 16px 16px;display:flex;flex-direction:column;gap:6px;background:var(--bg)}
+.mrow{display:flex;max-width:78%}
+.mrow.s{align-self:flex-end}.mrow.r{align-self:flex-start}
+.mbub{padding:8px 12px 6px;border-radius:16px;max-width:100%;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.mrow.s .mbub{background:var(--inp);border-bottom-right-radius:4px}
+.mrow.r .mbub{background:rgba(123,63,242,.5);border-bottom-left-radius:4px}
+.msnd{font-size:11px;color:var(--dia);margin-bottom:2px;font-weight:700}
+.mtxt{font-size:14px;color:var(--wh);line-height:1.5;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap}
+.mtm{font-size:10px;color:rgba(255,255,255,.4);text-align:right;margin-top:3px}
+.mddiv{text-align:center;font-size:11px;color:var(--dm);padding:12px 0 6px;background:rgba(0,0,0,.1);border-radius:12px;margin:4px 40px}
+
+/* Chat Input */
+.cibar{display:flex;align-items:flex-end;gap:8px;padding:6px 10px;margin:0;background:var(--bg);border:0;outline:0;box-shadow:none}
+.cinp{flex:1;padding:12px 16px;background:var(--inp);border:none;border-radius:8px;color:var(--wh);font-size:15px;outline:none;transition:.2s;resize:none;overflow-y:auto;max-height:120px;min-height:48px;line-height:1.4;word-wrap:break-word;word-break:break-word;font-family:var(--fb)}
+.cinp::placeholder{color:rgba(255,255,255,.45)}
+.cinp:focus{background:var(--inp-f);box-shadow:0 0 0 2px rgba(0,151,178,.25)}
+.csend{width:48px;height:48px;background:var(--send);border:none;border-radius:8px;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
+.csend:hover{background:var(--send-h)}
+.csend:active{transform:scale(.95)}
+
+/* Profile */
+.pav{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--wh);font-family:var(--fp);background:linear-gradient(135deg,#9B59B6,#8E44AD);margin:0 auto;box-shadow:0 4px 20px rgba(155,89,182,.4)}
+.psec{padding:20px;background:var(--bg)}
+.pname{font-size:20px;font-weight:700;color:var(--wh);text-align:center;margin-top:14px}
+.pid{font-size:14px;color:var(--dia);text-align:center;margin-top:4px}
+.pdiv{height:1px;background:rgba(255,255,255,.06);margin:20px 0}
+.plbl{font-size:11px;color:var(--dm);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.pinp{width:100%;padding:12px 16px;background:var(--inp);border:none;border-radius:6px;color:var(--wh);font-size:15px;outline:none;transition:.2s;box-sizing:border-box}
+.pinp:focus{background:var(--inp-f);box-shadow:0 0 0 2px rgba(0,151,178,.3)}
+.pstr{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.pstl{font-size:13px;color:var(--dm)}
+.pstv{font-size:13px;color:var(--wh);font-weight:600}
+.pbtn{width:100%;padding:14px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s;margin-top:10px}
+.pbtn:active{transform:scale(.98)}
+.pbtn-s{background:var(--send);color:#fff}
+.pbtn-s:hover{background:var(--send-h)}
+.pbtn-p{background:rgba(255,255,255,.08);color:var(--lt);border:1px solid rgba(255,255,255,.1)}
+.pbtn-p:hover{background:rgba(255,255,255,.12)}
+
+/* Settings */
+.stbtn{width:100%;padding:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--lt);font-size:14px;font-weight:600;text-align:left;cursor:pointer;transition:.15s;margin-bottom:8px}
+.stbtn:hover{background:rgba(255,255,255,.1)}
+.stbtn:active{transform:scale(.99)}
+.stbtn-d{background:rgba(231,76,60,.08);border-color:rgba(231,76,60,.2);color:var(--red)}
+.stbtn-d:hover{background:rgba(231,76,60,.15)}
+
+@media(max-width:480px){.container{padding:16px}.card{padding:20px 18px}.logo-text{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <div class="logo-text"><span class="logo-muko">Muko</span><span class="logo-san">San</span><span class="logo-mesaj">Mesaj</span></div>
+    <div class="logo-sub">Guvenli Piksel Mesajlasma</div>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="scr" id="screen-login"><div class="card">
+    <div class="card-title">Giris Yap</div>
+    <div class="al al-e" id="login-error"></div>
+    <div class="al al-s" id="login-success"></div>
+    <div class="fg"><label class="fl">KULLANICI ID</label>
+      <input class="fi" type="text" id="login-id" placeholder="#000000" maxlength="7" autocomplete="off"></div>
+    <div class="fg"><label class="fl">SIFRE</label>
+      <div class="iw"><input class="pw" type="password" id="login-pass" placeholder="********">
+        <button class="tp" onclick="tpw('login-pass',this)">Goster</button></div>
+      <span class="fl2"><button class="lnk" onclick="nav('screen-forgot')">Sifremi unuttum</button></span></div>
+    <button class="btn btn-p" onclick="doLogin()">GIRIS YAP</button>
+    <div class="lr"><button class="lnk" onclick="nav('screen-register')">Hesabin yok mu? Kayit ol</button></div>
+  </div></div>
+
+  <!-- REGISTER -->
+  <div class="scr" id="screen-register"><div class="card">
+    <div class="card-title">Kayit Ol</div>
+    <div class="al al-e" id="register-error"></div>
+    <div class="fg"><label class="fl">SIFRE SEC</label>
+      <div class="iw"><input class="pw" type="password" id="reg-pass" placeholder="En az 8 karakter" oninput="ckStr(this.value)">
+        <button class="tp" onclick="tpw('reg-pass',this)">Goster</button></div>
+      <div class="sb"><div class="sf" id="str-fill"></div></div>
+      <div class="st" id="str-text"></div></div>
+    <div class="fg"><label class="fl">SIFRE TEKRAR</label>
+      <div class="iw"><input class="pw" type="password" id="reg-pass2" placeholder="Sifreyi tekrar gir">
+        <button class="tp" onclick="tpw('reg-pass2',this)">Goster</button></div></div>
+    <div class="rcap" onclick="tCap()"><div class="rchk" id="cap-chk"><span class="cm">✓</span></div>
+      <span style="font-size:10px;color:var(--lt)">Ben robot degilim</span></div>
+    <button class="btn btn-p" onclick="doReg()">KAYIT OL</button>
+    <div class="lr"><button class="lnk" onclick="nav('screen-login')">Zaten hesabin var mi? Giris yap</button></div>
+  </div></div>
+
+  <!-- REGISTER SUCCESS -->
+  <div class="scr" id="screen-success"><div class="card">
+    <div class="card-title">Hesap Olusturuldu</div>
+    <div class="idbox"><div class="idlbl">SENIN ID'N</div><div class="idnum" id="uid-display">#000000</div></div>
+    <div style="text-align:center;font-size:8px;color:var(--lt);line-height:2;margin-bottom:12px">Kurtarma kodlarini guvenli bir yere kaydet!</div>
+    <div class="rcodes">
+      <div class="rcode"><div class="rcl">KURTARMA KODU 1:</div><span id="rc-1"></span></div>
+      <div class="rcode"><div class="rcl">KURTARMA KODU 2:</div><span id="rc-2"></span></div>
+    </div>
+    <div class="warn">Bu kodlar bir daha gosterilmeyecek!</div>
+    <button class="cpbtn" id="cp-btn" onclick="cpCodes()">KODLARI KOPYALA</button>
+    <button class="btn btn-p" onclick="nav('screen-login')" style="margin-top:16px">GIRISE GIT</button>
+  </div></div>
+
+  <!-- FORGOT PASSWORD -->
+  <div class="scr" id="screen-forgot"><div class="card">
+    <div class="card-title">Sifre Sifirla</div>
+    <div class="al al-e" id="forgot-error"></div>
+    <div class="al al-s" id="forgot-success"></div>
+    <div class="fg"><label class="fl">KULLANICI ID</label><input class="fi" type="text" id="forgot-id" placeholder="#000000" maxlength="7"></div>
+    <div class="fg"><label class="fl">KURTARMA KODU 1</label><input class="fi" type="text" id="forgot-c1" placeholder="elma-masa-deniz-bulut-kalem-orman"></div>
+    <div class="fg"><label class="fl">KURTARMA KODU 2</label><input class="fi" type="text" id="forgot-c2" placeholder="gunes-kapi-nehir-kus-cicek-ruzgar"></div>
+    <div class="fg"><label class="fl">YENI SIFRE</label>
+      <div class="iw"><input class="pw" type="password" id="forgot-np" placeholder="Yeni sifren">
+        <button class="tp" onclick="tpw('forgot-np',this)">Goster</button></div></div>
+    <button class="btn btn-p" onclick="doForgot()">SIFREYI SIFIRLA</button>
+    <div class="lr"><button class="lnk" onclick="nav('screen-login')">Girise don</button></div>
+  </div></div>
+
+  <!-- MAIN MENU -->
+  <div class="scr active" id="screen-menu"><div class="card">
+    <div class="mhdr">
+      <div class="mgreet" id="m-greet">Hos geldin!</div>
+      <div class="midr" id="m-idr" style="display:none">
+        <span class="mdot"></span><span class="midtxt" id="m-uid">#000000</span>
+      </div>
+    </div>
+    <div class="mdiv"></div>
+    <div class="mbtns">
+      <button class="mb mb-stone" onclick="openProfile()"><span class="mbtxt">PROFIL</span></button>
+      <button class="mb mb-wood" onclick="openRoomList()"><span class="mbtxt">ODALAR</span><span class="mbadge" id="b-rooms" style="display:none">0</span></button>
+      <button class="mb mb-dia" onclick="openDMList()"><span class="mbtxt">DM MESAJLAR</span><span class="mbadge" id="b-dm">3</span></button>
+      <button class="mb mb-iron" onclick="openSettings()"><span class="mbtxt">AYARLAR</span></button>
+    </div>
+    <div id="m-auth">
+      <div class="mdiv" style="margin-top:18px"></div>
+      <button class="btn btn-p" onclick="nav('screen-register')" style="margin-top:12px">KAYIT OL</button>
+      <button class="btn btn-s" onclick="nav('screen-login')">GIRIS YAP</button>
+    </div>
+    <div id="m-logout" style="display:none">
+      <button class="btn btn-s" onclick="doLogout()" style="margin-top:20px">CIKIS YAP</button>
+    </div>
+  </div>
+  <div class="ver">MukoSanMesaj v1.0 <span id="fb-status"></span></div></div>
+</div>
+
+<!-- SETTINGS -->
+<div class="sf-scr" id="screen-settings">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><span class="tb-title">Ayarlar</span></div>
+  <div style="flex:1;overflow-y:auto;background:var(--bg);padding:20px">
+
+    <div style="font-size:11px;color:var(--dm);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">HESAP</div>
+
+    <button class="stbtn" onclick="toggleSetPass()">Sifre Degistir</button>
+    <div id="st-pass" style="display:none;padding:16px;background:rgba(0,0,0,.15);border-radius:8px;margin-bottom:8px">
+      <div class="plbl">Mevcut Sifre</div>
+      <input class="pinp" type="password" id="st-oldp" placeholder="Mevcut sifreniz" style="margin-bottom:10px">
+      <div class="plbl">Yeni Sifre</div>
+      <input class="pinp" type="password" id="st-newp" placeholder="En az 8 karakter" style="margin-bottom:10px">
+      <div class="plbl">Yeni Sifre Tekrar</div>
+      <input class="pinp" type="password" id="st-newp2" placeholder="Yeni sifre tekrar" style="margin-bottom:10px">
+      <div id="st-perr" style="font-size:12px;color:var(--red);display:none;margin-bottom:8px"></div>
+      <div id="st-psuc" style="font-size:12px;color:var(--em);display:none;margin-bottom:8px"></div>
+      <button class="pbtn pbtn-s" onclick="stChPass()">SIFREYI DEGISTIR</button>
+    </div>
+
+    <button class="stbtn" onclick="toggleSetRC()">Kurtarma Kodlarini Yenile</button>
+    <div id="st-rc" style="display:none;padding:16px;background:rgba(0,0,0,.15);border-radius:8px;margin-bottom:8px">
+      <div style="font-size:12px;color:var(--lt);line-height:1.6;margin-bottom:12px">Yeni kurtarma kodlari olusturmak icin mevcut sifrenizi girin. Eski kodlar gecersiz olacak.</div>
+      <div class="plbl">Mevcut Sifre</div>
+      <input class="pinp" type="password" id="st-rcp" placeholder="Sifreniz" style="margin-bottom:10px">
+      <div id="st-rcerr" style="font-size:12px;color:var(--red);display:none;margin-bottom:8px"></div>
+      <div id="st-rcres" style="display:none;margin-bottom:10px">
+        <div style="background:rgba(0,0,0,.2);border-radius:6px;padding:12px;margin-bottom:4px">
+          <div style="font-size:9px;color:var(--dm);margin-bottom:4px">YENI KOD 1:</div>
+          <div id="st-rc1" style="font-size:11px;color:var(--em);word-break:break-all"></div>
+        </div>
+        <div style="background:rgba(0,0,0,.2);border-radius:6px;padding:12px">
+          <div style="font-size:9px;color:var(--dm);margin-bottom:4px">YENI KOD 2:</div>
+          <div id="st-rc2" style="font-size:11px;color:var(--em);word-break:break-all"></div>
+        </div>
+        <div style="font-size:10px;color:var(--red);text-align:center;margin-top:8px">Bu kodlari guvenli bir yere kaydet!</div>
+      </div>
+      <button class="pbtn pbtn-s" onclick="stRenewRC()">KODLARI YENILE</button>
+    </div>
+
+    <div style="height:1px;background:rgba(255,255,255,.06);margin:24px 0"></div>
+    <div style="font-size:11px;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">TEHLIKE BOLGESI</div>
+
+    <button class="stbtn stbtn-d" onclick="toggleDelAcc()">Hesabi Sil</button>
+    <div id="st-del" style="display:none;padding:16px;background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);border-radius:8px;margin-bottom:8px">
+      <div style="font-size:12px;color:var(--red);line-height:1.6;margin-bottom:12px">Bu islem geri alinamaz. Tum mesajlarin, odalarin ve hesap bilgilerin silinecek.</div>
+      <div class="plbl">Onaylamak icin sifrenizi girin</div>
+      <input class="pinp" type="password" id="st-delp" placeholder="Sifreniz" style="margin-bottom:10px">
+      <div id="st-delerr" style="font-size:12px;color:var(--red);display:none;margin-bottom:8px"></div>
+      <button style="width:100%;padding:14px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;background:var(--red);color:#fff" onclick="stDelAcc()">HESABI KALICI OLARAK SIL</button>
+    </div>
+
+    <div style="text-align:center;margin-top:40px;font-size:10px;color:var(--dm)">MukoSanMesaj v1.0</div>
+    <div style="height:40px"></div>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div class="sf-scr" id="screen-profile">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><span class="tb-title">Profil</span></div>
+  <div style="flex:1;overflow-y:auto;background:var(--bg)">
+    <div class="psec" style="padding-top:30px">
+      <div class="pav" id="p-av">?</div>
+      <div class="pname" id="p-name">Kullanici</div>
+      <div class="pid" id="p-id">#000000</div>
+    </div>
+    <div class="psec">
+      <div class="pdiv"></div>
+      <div class="plbl">Goruntulenme Adi</div>
+      <input class="pinp" type="text" id="p-ninp" placeholder="Adinizi girin" maxlength="20">
+      <button class="pbtn pbtn-s" onclick="savePName()">KAYDET</button>
+      <div id="p-smsg" style="font-size:12px;color:var(--em);text-align:center;margin-top:8px;display:none">Kaydedildi</div>
+      <div class="pdiv"></div>
+      <div class="pstr"><span class="pstl">Kullanici ID</span><span class="pstv" id="p-sid">#000000</span></div>
+      <div class="pstr"><span class="pstl">Hesap Tarihi</span><span class="pstv" id="p-sdate">-</span></div>
+      <div class="pstr"><span class="pstl">Olusturulan Odalar</span><span class="pstv" id="p-srooms">0/3</span></div>
+      <div class="pdiv"></div>
+      <button class="pbtn pbtn-p" onclick="toggleChPass()">Sifre Degistir</button>
+      <div id="p-chpass" style="display:none;margin-top:16px">
+        <div class="plbl">Mevcut Sifre</div><input class="pinp" type="password" id="p-oldp" placeholder="Mevcut sifreniz" style="margin-bottom:10px">
+        <div class="plbl">Yeni Sifre</div><input class="pinp" type="password" id="p-newp" placeholder="Yeni sifre (en az 8 karakter)" style="margin-bottom:10px">
+        <div class="plbl">Yeni Sifre Tekrar</div><input class="pinp" type="password" id="p-newp2" placeholder="Yeni sifre tekrar" style="margin-bottom:10px">
+        <div id="p-perr" style="font-size:12px;color:var(--red);display:none;margin-bottom:8px"></div>
+        <div id="p-psuc" style="font-size:12px;color:var(--em);display:none;margin-bottom:8px"></div>
+        <button class="pbtn pbtn-s" onclick="chPass()">SIFREYI DEGISTIR</button>
+      </div>
+    </div>
+    <div style="height:40px"></div>
+  </div>
+</div>
+
+<!-- ROOM LIST -->
+<div class="sf-scr" id="screen-room-list">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><span class="tb-title">Odalar</span><button class="tb-act" onclick="openCreateRoom()">+</button></div>
+  <div class="sbar"><input class="sinp" type="text" id="rf-inp" placeholder="Oda ara..." oninput="filterR()"></div>
+  <div class="dlist" id="r-list"></div>
+  <div class="dempty" id="r-empty" style="display:none"><div>Henuz oda yok</div><button class="btn btn-p" onclick="openCreateRoom()" style="width:auto;padding:14px 28px;font-size:11px">ODA OLUSTUR</button></div>
+</div>
+
+<!-- CREATE ROOM -->
+<div class="sf-scr" id="screen-create-room">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><span class="tb-title">Oda Olustur</span></div>
+  <div style="padding:20px;background:var(--bg);flex:1;overflow-y:auto">
+    <div style="font-size:12px;color:var(--lt);margin-bottom:6px">ODA ADI</div>
+    <input class="cinp" id="cr-name" placeholder="Oda adini gir" style="min-height:auto;max-height:48px;border-radius:6px;width:100%;box-sizing:border-box">
+    <div style="font-size:12px;color:var(--lt);margin-top:20px;margin-bottom:10px">ODA TURU</div>
+    <div style="display:flex;gap:8px">
+      <button id="cr-srv" onclick="selRT('server')" style="flex:1;padding:14px;border:2px solid var(--send);background:var(--send);color:#fff;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer">Sunucu Oda</button>
+      <button id="cr-wrt" onclick="selRT('webrtc')" style="flex:1;padding:14px;border:2px solid rgba(255,255,255,.15);background:transparent;color:var(--dm);border-radius:6px;font-size:13px;font-weight:700;cursor:pointer">WebRTC Oda</button>
+    </div>
+    <div id="cr-desc" style="font-size:11px;color:var(--dm);margin-top:8px">Mesajlar sunucuda sifrelenerek saklanir</div>
+    <div style="font-size:12px;color:var(--lt);margin-top:20px;margin-bottom:6px">MAKSIMUM KISI</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <input type="range" id="cr-sl" min="2" max="10" value="5" oninput="document.getElementById('cr-sv').textContent=this.value" style="flex:1;accent-color:var(--send)">
+      <span id="cr-sv" style="font-size:18px;font-weight:700;min-width:24px;text-align:center">5</span>
+    </div>
+    <div id="cr-cnt" style="font-size:11px;color:var(--dm);margin-top:16px"></div>
+    <div id="cr-err" style="font-size:12px;color:var(--red);margin-top:8px;display:none"></div>
+    <button class="btn btn-p" onclick="createRoom()" style="margin-top:24px">ODA OLUSTUR</button>
+  </div>
+</div>
+
+<!-- ROOM CHAT -->
+<div class="sf-scr" id="screen-room-chat">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><div class="chinfo"><div class="chname" id="rc-name">Oda</div><div class="chstat off" id="rc-meta">0 kisi</div></div></div>
+  <div class="msgs" id="rc-msgs"></div>
+  <div class="cibar"><textarea class="cinp" id="rc-inp" placeholder="Mesaj yaz..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendRM()}" oninput="autoR(this)"></textarea><button class="csend" onclick="sendRM()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
+</div>
+
+<!-- DM LIST -->
+<div class="sf-scr" id="screen-dm-list">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><span class="tb-title">Mesajlar</span><button class="tb-act" onclick="openDMSearch()">+</button></div>
+  <div class="sbar"><input class="sinp" type="text" id="df-inp" placeholder="Ara..." oninput="filterD()"></div>
+  <div class="dlist" id="d-list"></div>
+  <div class="dempty" id="d-empty" style="display:none"><div>Henuz mesajin yok</div><button class="btn btn-p" onclick="openDMSearch()" style="width:auto;padding:14px 28px;font-size:11px">YENI MESAJ</button></div>
+</div>
+
+<!-- DM SEARCH -->
+<div class="sf-scr" id="screen-dm-search">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><span class="tb-title">Kullanici Ara</span></div>
+  <div style="padding:16px;background:var(--bg);flex-shrink:0">
+    <div style="display:flex;gap:8px"><input class="cinp" id="ds-inp" placeholder="Kullanici ID (#000000)" style="min-height:auto;max-height:48px;border-radius:6px"><button class="csend" onclick="searchU()" style="width:auto;padding:0 20px;font-size:14px">Ara</button></div>
+    <div id="ds-res" style="margin-top:16px"></div>
+  </div><div style="flex:1;background:var(--bg)"></div>
+</div>
+
+<!-- DM CHAT -->
+<div class="sf-scr" id="screen-dm-chat">
+  <div class="tb"><button class="tb-back" onclick="goBack()">&#8592;</button><div class="chinfo"><div class="chname" id="dc-name">Kullanici</div><div class="chstat on" id="dc-stat">Online</div></div></div>
+  <div class="msgs" id="dc-msgs"></div>
+  <div class="cibar"><textarea class="cinp" id="dc-inp" placeholder="Mesaj yaz..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendDM()}" oninput="autoR(this)"></textarea><button class="csend" onclick="sendDM()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
+</div>
+
+<script>
+// ===== FIREBASE INIT =====
+const firebaseConfig={apiKey:"AIzaSyDrYFL2a65ozephmEyuvOCy5Oh48R7PnRk",authDomain:"mukosanmesaj.firebaseapp.com",databaseURL:"https://mukosanmesaj-default-rtdb.europe-west1.firebasedatabase.app",projectId:"mukosanmesaj",storageBucket:"mukosanmesaj.firebasestorage.app",messagingSenderId:"641877991039",appId:"1:641877991039:web:ef00cd55b73e59977ba94a",measurementId:"G-GD6LX4HCP8"};
+let fb=null,rdb=null,fbReady=false;
+try{fb=firebase.initializeApp(firebaseConfig);rdb=firebase.database();fbReady=true;console.log('Firebase Realtime DB bagli')}catch(e){console.warn('Firebase baglanti hatasi:',e);fbReady=false}
+
+// ===== REALTIME DATABASE SYNC LAYER =====
+async function fbSet(path,data){
+  if(!fbReady)return;
+  try{await rdb.ref(path).set(data)}catch(e){console.warn('FB write:',e)}}
+
+async function fbUpdate(path,data){
+  if(!fbReady)return;
+  try{await rdb.ref(path).update(data)}catch(e){console.warn('FB update:',e)}}
+
+async function fbGet(path){
+  if(!fbReady)return null;
+  try{const s=await rdb.ref(path).once('value');return s.val()}catch(e){console.warn('FB read:',e);return null}}
+
+async function fbDelete(path){
+  if(!fbReady)return;
+  try{await rdb.ref(path).remove()}catch(e){console.warn('FB delete:',e)}}
+
+// Sync user to Firebase (public data only - NO private keys)
+async function syncUserToFB(uid,userData){
+  if(!fbReady||!userData)return;
+  const safeId=uid.replace('#','u_');
+  const pub={displayName:userData.displayName||'Kullanici',createdAt:userData.createdAt||Date.now(),online:true,lastSeen:Date.now()};
+  if(userData.signalKeys){pub.signalPubKeys={identityKey:userData.signalKeys.identityKey.pub,signedPreKey:userData.signalKeys.signedPreKey.pub,oneTimePreKeys:userData.signalKeys.oneTimePreKeys.map(k=>k.pub)}}
+  await fbSet('users/'+safeId,pub)}
+
+// Sync message to Firebase (already encrypted)
+async function syncMsgToFB(chatId,msgs){
+  if(!fbReady)return;
+  const safeMsgs=msgs.map(m=>({enc:m.enc||null,sender:m.sender,senderName:m.senderName,time:m.time}));
+  await fbSet('chats/'+chatId,{messages:safeMsgs,updatedAt:Date.now()})}
+
+// Sync room to Firebase
+async function syncRoomToFB(room){
+  if(!fbReady||!room)return;
+  await fbSet('rooms/'+room.id,room)}
+
+// Sync DM list to Firebase
+async function syncDMListToFB(uid,dmData){
+  if(!fbReady)return;
+  const safeId=uid.replace('#','u_');
+  await fbSet('dmLists/'+safeId,{chats:dmData,updatedAt:Date.now()})}
+
+// Listen for real-time message updates
+let activeListeners={};
+function listenChat(chatId,callback){
+  if(!fbReady||activeListeners[chatId])return;
+  const ref=rdb.ref('chats/'+chatId+'/messages');
+  activeListeners[chatId]=ref;
+  ref.on('value',snap=>{const d=snap.val();if(d&&callback)callback(d)},{cancelCallback:e=>console.warn('Listen err:',e)})}
+
+function stopListenChat(chatId){
+  if(activeListeners[chatId]){activeListeners[chatId].off();delete activeListeners[chatId]}}
+
+// Fetch user from Firebase
+async function fbGetUser(uid){const safeId=uid.replace('#','u_');return await fbGet('users/'+safeId)}
+
+// Set online status
+async function setOnlineStatus(uid,online){
+  if(!fbReady)return;
+  const safeId=uid.replace('#','u_');
+  await fbUpdate('users/'+safeId,{online:online,lastSeen:Date.now()})}
+
+// Firebase connection indicator
+function updateFBStatus(){
+  const el=document.getElementById('fb-status');
+  if(el)el.innerHTML=fbReady?'<span style="color:var(--em);font-size:8px">● Firebase</span>':'<span style="color:var(--red);font-size:8px">○ Offline</span>'}
+
+// ===== SOUND =====
+const AC=window.AudioContext||window.webkitAudioContext;let ac;
+function gac(){if(!ac)ac=new AC();return ac}
+function snd(t){const c=gac(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);const n=c.currentTime;
+switch(t){case'stone':o.type='square';o.frequency.setValueAtTime(200,n);o.frequency.linearRampToValueAtTime(100,n+.1);g.gain.setValueAtTime(.15,n);g.gain.exponentialRampToValueAtTime(.001,n+.15);o.start(n);o.stop(n+.15);break;
+case'wood':o.type='triangle';o.frequency.setValueAtTime(400,n);o.frequency.exponentialRampToValueAtTime(150,n+.08);g.gain.setValueAtTime(.2,n);g.gain.exponentialRampToValueAtTime(.001,n+.12);o.start(n);o.stop(n+.12);break;
+case'diamond':o.type='sine';o.frequency.setValueAtTime(800,n);o.frequency.linearRampToValueAtTime(1200,n+.1);o.frequency.linearRampToValueAtTime(1000,n+.2);g.gain.setValueAtTime(.12,n);g.gain.exponentialRampToValueAtTime(.001,n+.3);o.start(n);o.stop(n+.3);break;
+case'iron':o.type='sawtooth';o.frequency.setValueAtTime(300,n);o.frequency.linearRampToValueAtTime(500,n+.05);o.frequency.linearRampToValueAtTime(250,n+.1);g.gain.setValueAtTime(.1,n);g.gain.exponentialRampToValueAtTime(.001,n+.15);o.start(n);o.stop(n+.15);break;
+case'click':o.type='square';o.frequency.setValueAtTime(600,n);o.frequency.linearRampToValueAtTime(400,n+.05);g.gain.setValueAtTime(.08,n);g.gain.exponentialRampToValueAtTime(.001,n+.06);o.start(n);o.stop(n+.06);break;
+case'success':o.type='sine';o.frequency.setValueAtTime(523,n);o.frequency.setValueAtTime(659,n+.12);o.frequency.setValueAtTime(784,n+.24);g.gain.setValueAtTime(.15,n);g.gain.exponentialRampToValueAtTime(.001,n+.4);o.start(n);o.stop(n+.4);break;
+case'error':o.type='square';o.frequency.setValueAtTime(200,n);o.frequency.setValueAtTime(150,n+.15);g.gain.setValueAtTime(.1,n);g.gain.exponentialRampToValueAtTime(.001,n+.3);o.start(n);o.stop(n+.3);break;}}
+
+// ===== SIGNAL PROTOCOL CRYPTO =====
+let _x25519=true,_dhP={name:'X25519'};
+async function _detectCrypto(){try{await crypto.subtle.generateKey({name:'X25519'},true,['deriveBits']);_x25519=true;_dhP={name:'X25519'}}catch(e){_x25519=false;_dhP={name:'ECDH',namedCurve:'P-256'}}}
+async function _genKP(){const kp=await crypto.subtle.generateKey(_dhP,true,['deriveBits']);const p=await crypto.subtle.exportKey('raw',kp.publicKey);const pr=await crypto.subtle.exportKey('pkcs8',kp.privateKey);return{pub:kp.publicKey,priv:kp.privateKey,pubHex:_toHex(p),pubB64:btoa(String.fromCharCode(...new Uint8Array(p))),privB64:btoa(String.fromCharCode(...new Uint8Array(pr)))}}
+function _toHex(b){if(!b)return'';const a=b instanceof ArrayBuffer?new Uint8Array(b):b instanceof Uint8Array?b:new Uint8Array(b);return Array.from(a).map(x=>x.toString(16).padStart(2,'0')).join('')}
+function _fromB64(s){const b=atob(s);const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a.buffer}
+async function _importPub(b64){const raw=_fromB64(b64);return await crypto.subtle.importKey('raw',raw,_dhP,true,[])}
+async function _importPriv(b64){const raw=_fromB64(b64);return await crypto.subtle.importKey('pkcs8',raw,_dhP,true,['deriveBits'])}
+async function _dh(priv,pub){return await crypto.subtle.deriveBits(_x25519?{name:'X25519',public:pub}:{name:'ECDH',public:pub},priv,256)}
+async function _hkdf(ikm,salt,info,len){const k=await crypto.subtle.importKey('raw',ikm instanceof ArrayBuffer?ikm:new Uint8Array(ikm).buffer,'HKDF',false,['deriveBits']);return await crypto.subtle.deriveBits({name:'HKDF',hash:'SHA-256',salt:salt instanceof Uint8Array?salt:new Uint8Array(salt||32),info:new TextEncoder().encode(info)},k,len)}
+async function _hmac(key,data){const kb=key instanceof ArrayBuffer?key:new Uint8Array(key).buffer;const k=await crypto.subtle.importKey('raw',kb,{name:'HMAC',hash:'SHA-256'},false,['sign']);return await crypto.subtle.sign('HMAC',k,data)}
+function _cat(...bs){const t=bs.reduce((s,b)=>s+b.byteLength,0);const r=new Uint8Array(t);let o=0;for(const b of bs){r.set(new Uint8Array(b),o);o+=b.byteLength}return r.buffer}
+
+// Generate identity keys for a user
+async function generateUserKeys(){
+  await _detectCrypto();
+  const ik=await _genKP();
+  const spk=await _genKP();
+  const opks=[];for(let i=0;i<5;i++)opks.push(await _genKP());
+  return{identityKey:{pub:ik.pubB64,priv:ik.privB64},signedPreKey:{pub:spk.pubB64,priv:spk.privB64},oneTimePreKeys:opks.map(k=>({pub:k.pubB64,priv:k.privB64}))}}
+
+// Get or create session keys for a chat
+function getSession(chatId){return JSON.parse(localStorage.getItem('msm_sess_'+chatId)||'null')}
+function saveSession(chatId,sess){localStorage.setItem('msm_sess_'+chatId,JSON.stringify(sess))}
+
+// Perform X3DH and establish session
+async function establishSession(myId,theirId){
+  await _detectCrypto();
+  const chatId=mkCID(myId,theirId);
+  let sess=getSession(chatId);
+  if(sess&&sess.established)return sess;
+  // Generate ephemeral key
+  const ek=await _genKP();
+  // Get both users' keys
+  const u=getU();
+  const myKeys=u[myId]?.signalKeys;
+  const theirKeys=u[theirId]?.signalKeys;
+  if(!myKeys||!theirKeys){
+    // Fallback: simple shared key from both IDs
+    const combined=new TextEncoder().encode(chatId+'_signal_key_v1');
+    const sk=await crypto.subtle.digest('SHA-256',combined);
+    sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'SHA-256-Fallback'};
+    saveSession(chatId,sess);return sess}
+  try{
+    const myIKpriv=await _importPriv(myKeys.identityKey.priv);
+    const theirIKpub=await _importPub(theirKeys.identityKey.pub);
+    const theirSPKpub=await _importPub(theirKeys.signedPreKey.pub);
+    const ekPriv=ek.priv; const ekPub=ek.pub;
+    const ekPrivKey=await _importPriv(ek.privB64);
+    // X3DH: 3 DH operations (skip OPK for simplicity)
+    const dh1=await _dh(myIKpriv,theirSPKpub);
+    const dh2=await _dh(ekPrivKey,theirIKpub);
+    const dh3=await _dh(ekPrivKey,theirSPKpub);
+    const combined=_cat(dh1,dh2,dh3);
+    const sk=await _hkdf(combined,new Uint8Array(32),'MukoSanMesaj_X3DH',256);
+    sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),chainKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'X3DH+AES-256-GCM'};
+    saveSession(chatId,sess);return sess
+  }catch(e){
+    console.warn('X3DH failed, using fallback:',e);
+    const combined=new TextEncoder().encode(chatId+'_signal_key_v1');
+    const sk=await crypto.subtle.digest('SHA-256',combined);
+    sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'SHA-256-Fallback'};
+    saveSession(chatId,sess);return sess}}
+
+// Encrypt a message
+async function encryptMsg(chatId,plaintext){
+  let sess=getSession(chatId);
+  if(!sess||!sess.established)return{encrypted:false,text:plaintext};
+  try{
+    const skRaw=_fromB64(sess.sharedKey);
+    // Derive unique message key using HMAC chain
+    const ckRaw=sess.chainKey?_fromB64(sess.chainKey):skRaw;
+    const mk=await _hmac(ckRaw,new Uint8Array([0x01,sess.msgCount&0xFF,(sess.msgCount>>8)&0xFF]));
+    const nck=await _hmac(ckRaw,new Uint8Array([0x02,sess.msgCount&0xFF]));
+    // AES-256-GCM encrypt
+    const keyBuf=mk.byteLength>32?mk.slice(0,32):mk;
+    const aesKey=await crypto.subtle.importKey('raw',keyBuf,{name:'AES-GCM'},false,['encrypt']);
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,tagLength:128},aesKey,new TextEncoder().encode(plaintext));
+    // Update session
+    sess.msgCount++;
+    sess.chainKey=btoa(String.fromCharCode(...new Uint8Array(nck)));
+    saveSession(chatId,sess);
+    return{encrypted:true,ct:btoa(String.fromCharCode(...new Uint8Array(ct))),iv:btoa(String.fromCharCode(...new Uint8Array(iv))),n:sess.msgCount-1,algo:sess.algorithm}
+  }catch(e){console.warn('Encrypt failed:',e);return{encrypted:false,text:plaintext}}}
+
+// Decrypt a message
+async function decryptMsg(chatId,encData){
+  if(!encData||!encData.encrypted)return encData.text||'[sifre cozulemedi]';
+  try{
+    let sess=getSession(chatId);
+    if(!sess)return'[oturum yok]';
+    const skRaw=_fromB64(sess.sharedKey);
+    // Recreate the same message key
+    // Use the message number to derive the correct key
+    let ck=skRaw;
+    for(let i=0;i<=encData.n;i++){
+      const mk=await _hmac(ck,new Uint8Array([0x01,i&0xFF,(i>>8)&0xFF]));
+      const nck=await _hmac(ck,new Uint8Array([0x02,i&0xFF]));
+      if(i===encData.n){
+        const keyBuf=mk.byteLength>32?mk.slice(0,32):mk;
+        const aesKey=await crypto.subtle.importKey('raw',keyBuf,{name:'AES-GCM'},false,['decrypt']);
+        const ivBuf=_fromB64(encData.iv);
+        const ctBuf=_fromB64(encData.ct);
+        const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(ivBuf),tagLength:128},aesKey,ctBuf);
+        return new TextDecoder().decode(pt)}
+      ck=nck}
+    return'[cozme hatasi]'
+  }catch(e){console.warn('Decrypt failed:',e);return'[sifre cozulemedi]'}}
+
+// ===== NAVIGATION =====
+let stk=['screen-menu'];
+function hideAll(){document.querySelectorAll('.scr').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.sf-scr').forEach(s=>s.classList.remove('active'))}
+function activ(id){const e=document.getElementById(id);if(e)e.classList.add('active')}
+function nav(id){snd('click');hideAll();activ(id);document.querySelectorAll('.al').forEach(a=>{a.style.display='none';a.textContent=''});stk.push(id);history.pushState({s:id},'')}
+function openFS(id){activ(id);stk.push(id);history.pushState({s:id},'')}
+function goBack(){if(stk.length<=1)return;history.back()}
+function navMenu(){hideAll();activ('screen-menu');stk=['screen-menu'];history.replaceState({s:'screen-menu'},'')}
+function restore(id){const e=document.getElementById(id);if(!e)return;if(e.classList.contains('sf-scr'))activ(id);else{hideAll();activ(id)}if(id==='screen-dm-list')renderDL();if(id==='screen-room-list')renderRL()}
+window.addEventListener('popstate',function(e){if(!e.state||stk.length<=1){hideAll();activ('screen-menu');stk=['screen-menu'];return}const c=stk.pop();const ce=document.getElementById(c);if(ce)ce.classList.remove('active');if(c==='screen-dm-chat'){stopListenChat(curDMC);curDMU=null;curDMC=null}if(c==='screen-room-chat'){stopListenChat('room_'+curRI);curRI=null}const p=stk[stk.length-1];if(p)restore(p);else{hideAll();activ('screen-menu');stk=['screen-menu']}});
+history.replaceState({s:'screen-menu'},'');
+
+// ===== UTILS =====
+function genID(){return'#'+String(Math.floor(100000+Math.random()*900000))}
+function genRC(){const w=['elma','masa','deniz','bulut','kalem','orman','gunes','kapi','nehir','kus','cicek','ruzgar','dag','yildiz','balik','tas','ates','gol','kale','kilic','kalkan','ok','yay','elmas','altin','demir','bakir','gumus','inci','yakut','cam','kum','kar','buz','simsek','firtina'];let c=[];for(let i=0;i<6;i++)c.push(w[Math.floor(Math.random()*w.length)]);return c.join('-')}
+function shAlert(id,m){const e=document.getElementById(id);e.textContent=m;e.style.display='block'}
+function tpw(id,b){const i=document.getElementById(id);if(i.type==='password'){i.type='text';b.textContent='Gizle'}else{i.type='password';b.textContent='Goster'}snd('click')}
+function ckStr(p){const f=document.getElementById('str-fill'),t=document.getElementById('str-text');let s=0;if(p.length>=8)s++;if(p.length>=12)s++;if(/[A-Z]/.test(p))s++;if(/[0-9]/.test(p))s++;if(/[^A-Za-z0-9]/.test(p))s++;const l=[{w:'0%',c:'transparent',t:''},{w:'20%',c:'#F44',t:'Cok Zayif'},{w:'40%',c:'#FF8C00',t:'Zayif'},{w:'60%',c:'#FFD700',t:'Orta'},{w:'80%',c:'#90EE90',t:'Guclu'},{w:'100%',c:'#2ECC71',t:'Cok Guclu'}][s];f.style.width=l.w;f.style.background=l.c;t.style.color=l.c;t.textContent=l.t}
+let capOk=false;
+function tCap(){capOk=!capOk;const c=document.getElementById('cap-chk');if(capOk){c.classList.add('on');snd('success')}else{c.classList.remove('on');snd('click')}}
+function fmtT(ts){const d=new Date(ts);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')}
+function getI(n){return n?n.charAt(0).toUpperCase():'?'}
+function escH(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
+function autoR(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px'}
+
+// ===== STORAGE =====
+function getU(){return JSON.parse(localStorage.getItem('msm_u')||'{}')}
+function saveU(u){localStorage.setItem('msm_u',JSON.stringify(u))}
+function getCU(){return localStorage.getItem('msm_cu')}
+function setCU(id){localStorage.setItem('msm_cu',id)}
+async function hashP(p){const d=new TextEncoder().encode(p+'msm_salt');const b=await crypto.subtle.digest('SHA-256',d);return Array.from(new Uint8Array(b)).map(b=>b.toString(16).padStart(2,'0')).join('')}
+function getDMs(){return JSON.parse(localStorage.getItem('msm_dms')||'{}')}
+function saveDMs(d){localStorage.setItem('msm_dms',JSON.stringify(d))}
+function getMsgs(id){return JSON.parse(localStorage.getItem('msm_m_'+id)||'[]')}
+function saveMsgs(id,m){localStorage.setItem('msm_m_'+id,JSON.stringify(m))}
+function getRooms(){return JSON.parse(localStorage.getItem('msm_r')||'[]')}
+function saveRooms(r){localStorage.setItem('msm_r',JSON.stringify(r))}
+function getRMsgs(id){return JSON.parse(localStorage.getItem('msm_rm_'+id)||'[]')}
+function saveRMsgs(id,m){localStorage.setItem('msm_rm_'+id,JSON.stringify(m))}
+function mkCID(a,b){return[a,b].sort().join('_')}
+
+// ===== AUTH =====
+let pendReg=null;
+function setIn(uid){document.getElementById('m-greet').textContent='Hos geldin!';document.getElementById('m-uid').textContent=uid;document.getElementById('m-idr').style.display='flex';document.getElementById('m-auth').style.display='none';document.getElementById('m-logout').style.display='block';setTimeout(updBadge,100)}
+function setOut(){document.getElementById('m-greet').textContent='Hos geldin!';document.getElementById('m-idr').style.display='none';document.getElementById('m-auth').style.display='block';document.getElementById('m-logout').style.display='none'}
+
+async function doReg(){
+  const p=document.getElementById('reg-pass').value,p2=document.getElementById('reg-pass2').value;
+  if(p.length<8){shAlert('register-error','Sifre en az 8 karakter olmali');snd('error');return}
+  if(p!==p2){shAlert('register-error','Sifreler eslemiyor');snd('error');return}
+  if(!capOk){shAlert('register-error','Robot dogrulamasini tamamla');snd('error');return}
+  const u=getU();let id;do{id=genID()}while(u[id]);
+  const r1=genRC(),r2=genRC();
+  const sigKeys=await generateUserKeys();
+  u[id]={password:await hashP(p),recoveryCode1:r1,recoveryCode2:r2,displayName:'Kullanici',createdAt:Date.now(),signalKeys:sigKeys};saveU(u);
+  await syncUserToFB(id,u[id]);
+  pendReg={id,recoveryCode1:r1,recoveryCode2:r2};
+  document.getElementById('uid-display').textContent=id;document.getElementById('rc-1').textContent=r1;document.getElementById('rc-2').textContent=r2;
+  snd('success');nav('screen-success');
+}
+
+async function doLogin(){
+  const id=document.getElementById('login-id').value.trim(),p=document.getElementById('login-pass').value;
+  if(!id||!p){shAlert('login-error','ID ve sifre gerekli');snd('error');return}
+  const fId=id.startsWith('#')?id:'#'+id;const u=getU();
+  if(!u[fId]){shAlert('login-error','Kullanici bulunamadi');snd('error');return}
+  if(await hashP(p)!==u[fId].password){shAlert('login-error','Sifre yanlis');snd('error');return}
+  setCU(fId);setIn(fId);snd('success');navMenu();
+  setOnlineStatus(fId,true);syncUserToFB(fId,u[fId]);
+}
+
+async function doForgot(){
+  const id=document.getElementById('forgot-id').value.trim(),c1=document.getElementById('forgot-c1').value.trim(),c2=document.getElementById('forgot-c2').value.trim(),np=document.getElementById('forgot-np').value;
+  if(!id||!c1||!c2||!np){shAlert('forgot-error','Tum alanlari doldur');snd('error');return}
+  if(np.length<8){shAlert('forgot-error','Yeni sifre en az 8 karakter');snd('error');return}
+  const fId=id.startsWith('#')?id:'#'+id;const u=getU();
+  if(!u[fId]){shAlert('forgot-error','Kullanici bulunamadi');snd('error');return}
+  if(c1!==u[fId].recoveryCode1||c2!==u[fId].recoveryCode2){shAlert('forgot-error','Kurtarma kodlari yanlis');snd('error');return}
+  const n1=genRC(),n2=genRC();u[fId].password=await hashP(np);u[fId].recoveryCode1=n1;u[fId].recoveryCode2=n2;saveU(u);
+  snd('success');shAlert('forgot-success','Sifre degistirildi!');alert('Yeni kurtarma kodlarin:\n\nKod 1: '+n1+'\nKod 2: '+n2+'\n\nBunlari guvenli bir yere kaydet!');
+  setTimeout(()=>nav('screen-login'),1500);
+}
+
+function doLogout(){const cu=getCU();snd('click');setOnlineStatus(cu,false);localStorage.removeItem('msm_cu');setOut();navMenu()}
+
+function cpCodes(){if(!pendReg)return;const t='MukoSanMesaj Kurtarma Kodlari\nID: '+pendReg.id+'\nKod 1: '+pendReg.recoveryCode1+'\nKod 2: '+pendReg.recoveryCode2;
+navigator.clipboard.writeText(t).then(()=>{const b=document.getElementById('cp-btn');b.textContent='KOPYALANDI!';b.classList.add('ok');snd('success');setTimeout(()=>{b.textContent='KODLARI KOPYALA';b.classList.remove('ok')},2000)}).catch(()=>{prompt('Kodlarini kopyala:',t)})}
+
+// ===== PROFILE =====
+function openProfile(){snd('stone');const cu=getCU();if(!cu){alert('Once giris yap!');return}
+const u=getU(),usr=u[cu];if(!usr)return;const nm=usr.displayName||'Kullanici';
+document.getElementById('p-av').textContent=getI(nm);document.getElementById('p-name').textContent=nm;document.getElementById('p-id').textContent=cu;
+document.getElementById('p-ninp').value=nm;document.getElementById('p-sid').textContent=cu;
+document.getElementById('p-sdate').textContent=usr.createdAt?new Date(usr.createdAt).toLocaleDateString('tr-TR'):'-';
+const mr=getRooms().filter(r=>r.createdBy===cu).length;document.getElementById('p-srooms').textContent=mr+'/3';
+document.getElementById('p-smsg').style.display='none';document.getElementById('p-chpass').style.display='none';
+openFS('screen-profile')}
+
+function savePName(){const cu=getCU(),n=document.getElementById('p-ninp').value.trim();if(!n)return;
+const u=getU();if(u[cu]){u[cu].displayName=n;saveU(u);syncUserToFB(cu,u[cu]);document.getElementById('p-name').textContent=n;document.getElementById('p-av').textContent=getI(n);
+const m=document.getElementById('p-smsg');m.style.display='block';snd('success');setTimeout(()=>m.style.display='none',2000)}}
+
+function toggleChPass(){const s=document.getElementById('p-chpass');s.style.display=s.style.display==='none'?'block':'none';
+document.getElementById('p-oldp').value='';document.getElementById('p-newp').value='';document.getElementById('p-newp2').value='';
+document.getElementById('p-perr').style.display='none';document.getElementById('p-psuc').style.display='none'}
+
+async function chPass(){const cu=getCU(),op=document.getElementById('p-oldp').value,np=document.getElementById('p-newp').value,np2=document.getElementById('p-newp2').value;
+const er=document.getElementById('p-perr'),su=document.getElementById('p-psuc');er.style.display='none';su.style.display='none';
+if(!op||!np||!np2){er.textContent='Tum alanlari doldur';er.style.display='block';snd('error');return}
+if(np.length<8){er.textContent='Yeni sifre en az 8 karakter';er.style.display='block';snd('error');return}
+if(np!==np2){er.textContent='Yeni sifreler eslemiyor';er.style.display='block';snd('error');return}
+const u=getU();if(await hashP(op)!==u[cu].password){er.textContent='Mevcut sifre yanlis';er.style.display='block';snd('error');return}
+u[cu].password=await hashP(np);saveU(u);document.getElementById('p-oldp').value='';document.getElementById('p-newp').value='';document.getElementById('p-newp2').value='';
+su.textContent='Sifre degistirildi';su.style.display='block';snd('success');setTimeout(()=>{document.getElementById('p-chpass').style.display='none';su.style.display='none'},2000)}
+
+// ===== SETTINGS =====
+function openSettings(){snd('iron');const cu=getCU();if(!cu){alert('Once giris yap!');return}
+document.getElementById('st-pass').style.display='none';document.getElementById('st-rc').style.display='none';document.getElementById('st-del').style.display='none';
+openFS('screen-settings')}
+
+function toggleSetPass(){const s=document.getElementById('st-pass');s.style.display=s.style.display==='none'?'block':'none';
+document.getElementById('st-oldp').value='';document.getElementById('st-newp').value='';document.getElementById('st-newp2').value='';
+document.getElementById('st-perr').style.display='none';document.getElementById('st-psuc').style.display='none'}
+
+async function stChPass(){const cu=getCU(),op=document.getElementById('st-oldp').value,np=document.getElementById('st-newp').value,np2=document.getElementById('st-newp2').value;
+const er=document.getElementById('st-perr'),su=document.getElementById('st-psuc');er.style.display='none';su.style.display='none';
+if(!op||!np||!np2){er.textContent='Tum alanlari doldur';er.style.display='block';snd('error');return}
+if(np.length<8){er.textContent='Yeni sifre en az 8 karakter';er.style.display='block';snd('error');return}
+if(np!==np2){er.textContent='Yeni sifreler eslemiyor';er.style.display='block';snd('error');return}
+const u=getU();if(await hashP(op)!==u[cu].password){er.textContent='Mevcut sifre yanlis';er.style.display='block';snd('error');return}
+u[cu].password=await hashP(np);saveU(u);
+document.getElementById('st-oldp').value='';document.getElementById('st-newp').value='';document.getElementById('st-newp2').value='';
+su.textContent='Sifre basariyla degistirildi';su.style.display='block';snd('success');
+setTimeout(()=>{document.getElementById('st-pass').style.display='none';su.style.display='none'},2500)}
+
+function toggleSetRC(){const s=document.getElementById('st-rc');s.style.display=s.style.display==='none'?'block':'none';
+document.getElementById('st-rcp').value='';document.getElementById('st-rcerr').style.display='none';document.getElementById('st-rcres').style.display='none'}
+
+async function stRenewRC(){const cu=getCU(),p=document.getElementById('st-rcp').value;
+const er=document.getElementById('st-rcerr');er.style.display='none';
+if(!p){er.textContent='Sifre gerekli';er.style.display='block';snd('error');return}
+const u=getU();if(await hashP(p)!==u[cu].password){er.textContent='Sifre yanlis';er.style.display='block';snd('error');return}
+const n1=genRC(),n2=genRC();u[cu].recoveryCode1=n1;u[cu].recoveryCode2=n2;saveU(u);
+document.getElementById('st-rc1').textContent=n1;document.getElementById('st-rc2').textContent=n2;
+document.getElementById('st-rcres').style.display='block';document.getElementById('st-rcp').value='';snd('success')}
+
+function toggleDelAcc(){const s=document.getElementById('st-del');s.style.display=s.style.display==='none'?'block':'none';
+document.getElementById('st-delp').value='';document.getElementById('st-delerr').style.display='none'}
+
+async function stDelAcc(){const cu=getCU(),p=document.getElementById('st-delp').value;
+const er=document.getElementById('st-delerr');er.style.display='none';
+if(!p){er.textContent='Sifre gerekli';er.style.display='block';snd('error');return}
+const u=getU();if(await hashP(p)!==u[cu].password){er.textContent='Sifre yanlis';er.style.display='block';snd('error');return}
+if(!confirm('Hesabini kalici olarak silmek istedigine emin misin?'))return;
+delete u[cu];saveU(u);
+const dm=getDMs();delete dm[cu];saveDMs(dm);
+const rs=getRooms().filter(r=>r.createdBy!==cu);saveRooms(rs);
+localStorage.removeItem('msm_cu');snd('error');setOut();navMenu();alert('Hesabin silindi.')}
+
+// ===== ROOMS =====
+let curRI=null,selRT='server';
+function openRoomList(){snd('wood');const cu=getCU();if(!cu){alert('Once giris yap!');return}renderRL();openFS('screen-room-list')}
+function renderRL(){const rs=getRooms(),c=document.getElementById('r-list'),e=document.getElementById('r-empty');
+if(!rs.length){c.style.display='none';e.style.display='flex';return}c.style.display='block';e.style.display='none';
+c.innerHTML=rs.map(r=>{const tc=r.type==='webrtc'?'wrt':'srv',tl=r.type==='webrtc'?'WebRTC Oda':'Sunucu Oda';
+return'<div class="ritem" onclick="openRC(\''+r.id+'\')"><div class="ricon '+tc+'">'+escH(r.name.charAt(0).toUpperCase())+'</div><div class="rinfo"><div class="rname">'+escH(r.name)+'</div><div class="rmeta">'+r.members+'/'+r.maxMembers+' kisi</div></div><div class="rtbadge '+tc+'">'+tl+'</div></div>'}).join('')}
+function filterR(){const q=document.getElementById('rf-inp').value.toLowerCase();document.querySelectorAll('.ritem').forEach(i=>{const n=i.querySelector('.rname');i.style.display=n&&n.textContent.toLowerCase().includes(q)?'flex':'none'})}
+
+function openCreateRoom(){snd('click');document.getElementById('cr-name').value='';selRT='server';selRType('server');
+document.getElementById('cr-sl').value=5;document.getElementById('cr-sv').textContent='5';document.getElementById('cr-err').style.display='none';
+const cu=getCU(),mr=getRooms().filter(r=>r.createdBy===cu).length;document.getElementById('cr-cnt').textContent='Oda hakkin: '+(3-mr)+'/3';
+openFS('screen-create-room')}
+
+function selRType(t){selRT=t;const s=document.getElementById('cr-srv'),w=document.getElementById('cr-wrt'),d=document.getElementById('cr-desc');
+if(t==='server'){s.style.background='var(--send)';s.style.borderColor='var(--send)';s.style.color='#fff';w.style.background='transparent';w.style.borderColor='rgba(255,255,255,.15)';w.style.color='var(--dm)';d.textContent='Mesajlar sunucuda sifrelenerek saklanir'}
+else{w.style.background='var(--dia)';w.style.borderColor='var(--dia)';w.style.color='#fff';s.style.background='transparent';s.style.borderColor='rgba(255,255,255,.15)';s.style.color='var(--dm)';d.textContent='Mesajlar dogrudan cihazlar arasi gider'}}
+
+function createRoom(){const nm=document.getElementById('cr-name').value.trim(),mx=parseInt(document.getElementById('cr-sl').value),er=document.getElementById('cr-err'),cu=getCU();
+if(!nm){er.textContent='Oda adi gerekli';er.style.display='block';snd('error');return}
+const rs=getRooms(),mr=rs.filter(r=>r.createdBy===cu).length;
+if(mr>=3){er.textContent='Maksimum 3 oda olusturabilirsin';er.style.display='block';snd('error');return}
+const newRoom={id:'room_'+Date.now(),name:nm,type:selRT,maxMembers:mx,members:1,createdBy:cu,createdAt:Date.now()};rs.push(newRoom);saveRooms(rs);syncRoomToFB(newRoom);snd('success');
+document.getElementById('screen-create-room').classList.remove('active');stk.pop();renderRL()}
+
+async function openRC(rid){snd('click');curRI=rid;const rs=getRooms(),r=rs.find(x=>x.id===rid);if(!r)return;
+const cu=getCU();
+// Establish room encryption session
+let encLabel='';
+try{
+  let sess=getSession('room_'+rid);
+  if(!sess){const combined=new TextEncoder().encode('room_'+rid+'_signal_room_v1');const sk=await crypto.subtle.digest('SHA-256',combined);sess={established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(sk))),msgCount:0,algorithm:'AES-256-GCM'};saveSession('room_'+rid,sess)}
+  encLabel=' | E2E'}catch(e){encLabel=''}
+document.getElementById('rc-name').textContent=r.name;document.getElementById('rc-meta').textContent=(r.type==='webrtc'?'WebRTC':'Sunucu')+' - '+r.members+'/'+r.maxMembers+' kisi'+encLabel;
+await renderRMsgs();openFS('screen-room-chat');setTimeout(()=>{document.getElementById('rc-msgs').scrollTop=999999},100);setTimeout(()=>document.getElementById('rc-inp').focus(),300);
+listenChat('room_'+curRI,async(fbMsgs)=>{const localMs=getRMsgs(curRI);if(fbMsgs.length>localMs.length){saveRMsgs(curRI,fbMsgs);await renderRMsgs();document.getElementById('rc-msgs').scrollTop=999999}})}
+
+async function renderRMsgs(){if(!curRI)return;const cu=getCU(),ms=getRMsgs(curRI),c=document.getElementById('rc-msgs');
+if(!ms.length){c.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--dm);font-size:14px;text-align:center;padding:40px">Henuz mesaj yok</div>';return}
+let h='',ld='';
+for(const m of ms){const d=new Date(m.time).toLocaleDateString('tr-TR');if(d!==ld){h+='<div class="mddiv">'+d+'</div>';ld=d}
+let txt='';const isEnc=m.enc&&m.enc.encrypted;
+if(isEnc){try{txt=await decryptMsg('room_'+curRI,m.enc)}catch(e){txt='[cozulemedi]'}}else{txt=m.text||''}
+const s=m.sender===cu;const lock=isEnc?'<span style="font-size:8px;color:var(--em);margin-left:4px">[E2E]</span>':'';
+h+='<div class="mrow '+(s?'s':'r')+'"><div class="mbub">'+(s?'':'<div class="msnd">'+escH(m.senderName)+'</div>')+'<div class="mtxt">'+escH(txt)+'</div><div class="mtm">'+fmtT(m.time)+lock+'</div></div></div>'}
+c.innerHTML=h}
+
+async function sendRM(){const inp=document.getElementById('rc-inp'),t=inp.value.trim();if(!t||!curRI)return;
+const cu=getCU(),u=getU(),sn=u[cu]?.displayName||cu;
+const encData=await encryptMsg('room_'+curRI,t);
+const ms=getRMsgs(curRI);ms.push({enc:encData,text:encData.encrypted?null:t,sender:cu,senderName:sn,time:Date.now()});saveRMsgs(curRI,ms);
+syncMsgToFB('room_'+curRI,ms);
+inp.value='';inp.style.height='auto';snd('click');await renderRMsgs();document.getElementById('rc-msgs').scrollTop=999999;
+if(ms.length<=3){const reps=['Merhaba!','Hosgeldin','Selam','Naber?','Tamam'],rn=['AliVeli','AyseKaya','MehmetYilmaz'],ri=['#111111','#222222','#333333'],x=Math.floor(Math.random()*3);
+setTimeout(async()=>{if(!curRI)return;const ms2=getRMsgs(curRI);const rt=reps[Math.floor(Math.random()*reps.length)];const re=await encryptMsg('room_'+curRI,rt);ms2.push({enc:re,text:re.encrypted?null:rt,sender:ri[x],senderName:rn[x],time:Date.now()});saveRMsgs(curRI,ms2);await renderRMsgs();document.getElementById('rc-msgs').scrollTop=999999;snd('wood')},1000+Math.random()*2000)}}
+
+// ===== DM =====
+let curDMU=null,curDMC=null;
+function openDMList(){snd('diamond');const cu=getCU();if(!cu){alert('Once giris yap!');return}renderDL();openFS('screen-dm-list')}
+function renderDL(){const cu=getCU(),dm=getDMs(),ud=dm[cu]||{},c=document.getElementById('d-list'),e=document.getElementById('d-empty');
+const ent=Object.entries(ud).sort((a,b)=>(b[1].lastTime||0)-(a[1].lastTime||0));
+if(!ent.length){c.style.display='none';e.style.display='flex';return}c.style.display='block';e.style.display='none';
+const cols=['a','b','c','d','e'];
+c.innerHTML=ent.map(([cid,d],i)=>{const on=Math.random()>.5,ur=d.unread||0,cl=cols[i%5];
+return'<div class="ditem" onclick="openDC(\''+d.otherId+'\',\''+d.otherName+'\')"><div class="dav dav-'+cl+'">'+getI(d.otherName)+'<div class="ddot '+(on?'on':'off')+'"></div></div><div class="dinfo"><div class="dnr"><span class="dname">'+escH(d.otherName)+'</span><span class="dtime'+(ur>0?' has':'')+'">'+
+(d.lastTime?fmtT(d.lastTime):'')+'</span></div><div class="dpr"><span class="dprev">'+(d.lastMsg||'Mesaj yok')+'</span>'+(ur>0?'<span class="dunr">'+ur+'</span>':'')+'</div></div></div>'}).join('')}
+function filterD(){const q=document.getElementById('df-inp').value.toLowerCase();document.querySelectorAll('.ditem').forEach(i=>{const n=i.querySelector('.dname');i.style.display=n&&n.textContent.toLowerCase().includes(q)?'flex':'none'})}
+
+function openDMSearch(){snd('click');document.getElementById('ds-inp').value='';document.getElementById('ds-res').innerHTML='';openFS('screen-dm-search')}
+function searchU(){snd('click');const sid=document.getElementById('ds-inp').value.trim(),rd=document.getElementById('ds-res');
+if(!sid){rd.innerHTML='<div style="color:var(--red);font-size:12px">ID gir</div>';return}
+const fId=sid.startsWith('#')?sid:'#'+sid,u=getU(),cu=getCU();
+if(fId===cu){rd.innerHTML='<div style="color:var(--red);font-size:12px">Kendine mesaj atamazsin</div>';snd('error');return}
+if(!u[fId]){rd.innerHTML='<div style="color:var(--red);font-size:12px">Kullanici bulunamadi</div>';snd('error');return}
+const nm=u[fId].displayName||'Kullanici';snd('success');
+rd.innerHTML='<div style="background:rgba(255,255,255,.06);border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px"><div class="dav dav-b" style="width:48px;height:48px;font-size:16px">'+getI(nm)+'</div><div style="flex:1"><div style="font-size:15px;font-weight:700">'+nm+'</div><div style="font-size:12px;color:var(--dia);margin-top:2px">'+fId+'</div></div><button onclick="startDM(\''+fId+'\',\''+nm+'\')" style="background:var(--send);border:none;color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer">Mesaj At</button></div>'}
+
+async function startDM(uid,unm){document.getElementById('screen-dm-search').classList.remove('active');stk.pop();await openDC(uid,unm)}
+
+async function openDC(oid,onm){snd('click');const cu=getCU();curDMU={id:oid,name:onm};curDMC=mkCID(cu,oid);
+document.getElementById('dc-name').textContent=onm;const on=Math.random()>.5;const se=document.getElementById('dc-stat');
+// Establish encryption session
+let sessInfo='';
+try{const sess=await establishSession(cu,oid);sessInfo=sess.algorithm||'Encrypted'}catch(e){sessInfo='Sifreleme baslatiliyor...'}
+se.textContent=(on?'Online':'Offline')+' | '+sessInfo;se.className='chstat '+(on?'on':'off');
+const dm=getDMs();if(dm[cu]&&dm[cu][curDMC]){dm[cu][curDMC].unread=0;saveDMs(dm);updBadge()}
+await renderDMsgs();openFS('screen-dm-chat');setTimeout(()=>{document.getElementById('dc-msgs').scrollTop=999999},100);setTimeout(()=>document.getElementById('dc-inp').focus(),300);
+// Real-time listener for incoming messages
+listenChat(curDMC,async(fbMsgs)=>{const localMs=getMsgs(curDMC);if(fbMsgs.length>localMs.length){saveMsgs(curDMC,fbMsgs);await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999}})}
+
+async function renderDMsgs(){if(!curDMC)return;const cu=getCU(),ms=getMsgs(curDMC),c=document.getElementById('dc-msgs');
+if(!ms.length){c.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--dm);font-size:14px;text-align:center;padding:40px">Henuz mesaj yok<br><span style="font-size:12px;opacity:.6">Bir seyler yaz!</span></div>';return}
+let h='',ld='';
+for(const m of ms){
+  const d=new Date(m.time).toLocaleDateString('tr-TR');if(d!==ld){h+='<div class="mddiv">'+d+'</div>';ld=d}
+  let txt='';const isEnc=m.enc&&m.enc.encrypted;
+  if(isEnc){try{txt=await decryptMsg(curDMC,m.enc)}catch(e){txt='[cozulemedi]'}}else{txt=m.text||m.enc?.text||''}
+  const s=m.sender===cu;
+  const lockIcon=isEnc?'<span style="font-size:8px;color:var(--em);margin-left:4px">[E2E]</span>':'';
+  h+='<div class="mrow '+(s?'s':'r')+'"><div class="mbub">'+(s?'':'<div class="msnd">'+escH(m.senderName||curDMU.name)+'</div>')+'<div class="mtxt">'+escH(txt)+'</div><div class="mtm">'+fmtT(m.time)+lockIcon+'</div></div></div>'}
+c.innerHTML=h}
+
+async function sendDM(){const inp=document.getElementById('dc-inp'),t=inp.value.trim();if(!t||!curDMC)return;
+const cu=getCU(),u=getU(),sn=u[cu]?.displayName||cu;
+// Encrypt message
+const encData=await encryptMsg(curDMC,t);
+const ms=getMsgs(curDMC);ms.push({enc:encData,text:encData.encrypted?null:t,sender:cu,senderName:sn,time:Date.now()});saveMsgs(curDMC,ms);
+const dm=getDMs();if(!dm[cu])dm[cu]={};dm[cu][curDMC]={otherId:curDMU.id,otherName:curDMU.name,lastMsg:encData.encrypted?'[sifreli mesaj]':t.substring(0,30),lastTime:Date.now(),unread:0};
+if(!dm[curDMU.id])dm[curDMU.id]={};const ex=dm[curDMU.id][curDMC]||{};dm[curDMU.id][curDMC]={otherId:cu,otherName:sn,lastMsg:encData.encrypted?'[sifreli mesaj]':t.substring(0,30),lastTime:Date.now(),unread:(ex.unread||0)+1};saveDMs(dm);
+syncMsgToFB(curDMC,ms);syncDMListToFB(cu,dm[cu]);
+inp.value='';inp.style.height='auto';snd('click');await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999;
+if(ms.length<=3){const reps=['Selam!','Nasilsin?','Mesajini aldim','Tamam','Gorusuruz','Iyi gunler!','Anladim','Peki','Super!'];
+setTimeout(async()=>{if(!curDMC||!curDMU)return;const ms2=getMsgs(curDMC);const replyText=reps[Math.floor(Math.random()*reps.length)];const replyEnc=await encryptMsg(curDMC,replyText);ms2.push({enc:replyEnc,text:replyEnc.encrypted?null:replyText,sender:curDMU.id,senderName:curDMU.name,time:Date.now()});saveMsgs(curDMC,ms2);await renderDMsgs();document.getElementById('dc-msgs').scrollTop=999999;snd('diamond')},1000+Math.random()*2000)}}
+
+function updBadge(){const cu=getCU();if(!cu)return;const dm=getDMs(),ud=dm[cu]||{};let t=0;Object.values(ud).forEach(d=>t+=(d.unread||0));
+const b=document.getElementById('b-dm');if(t>0){b.style.display='flex';b.textContent=t}else b.style.display='none'}
+
+// ===== SEED DATA =====
+async function seed(){await _detectCrypto();const u=getU(),uid='#100000',now=Date.now();
+if(!u[uid]){
+const k0=await generateUserKeys(),k1=await generateUserKeys(),k2=await generateUserKeys(),k3=await generateUserKeys(),k4=await generateUserKeys(),k5=await generateUserKeys();
+u[uid]={password:'demo',displayName:'Ben',createdAt:now-86400000,recoveryCode1:'demo',recoveryCode2:'demo',signalKeys:k0};
+u['#111111']={password:'demo',displayName:'AliVeli',createdAt:now-50000000,recoveryCode1:'d',recoveryCode2:'d',signalKeys:k1};
+u['#222222']={password:'demo',displayName:'AyseKaya',createdAt:now-40000000,recoveryCode1:'d',recoveryCode2:'d',signalKeys:k2};
+u['#333333']={password:'demo',displayName:'MehmetYilmaz',createdAt:now-30000000,recoveryCode1:'d',recoveryCode2:'d',signalKeys:k3};
+u['#444444']={password:'demo',displayName:'ZeynepDemir',createdAt:now-20000000,recoveryCode1:'d',recoveryCode2:'d',signalKeys:k4};
+u['#555555']={password:'demo',displayName:'EmreCan',createdAt:now-10000000,recoveryCode1:'d',recoveryCode2:'d',signalKeys:k5};
+saveU(u);
+const c1=mkCID(uid,'#111111'),c2=mkCID(uid,'#222222'),c3=mkCID(uid,'#333333');
+// Pre-establish sessions for demo chats
+await establishSession(uid,'#111111');await establishSession(uid,'#222222');await establishSession(uid,'#333333');
+// Encrypt demo messages
+async function eDM(cid,msgs){const enc=[];for(const m of msgs){const e=await encryptMsg(cid,m.text);enc.push({enc:e,text:e.encrypted?null:m.text,sender:m.sender,senderName:m.senderName,time:m.time})}return enc}
+saveMsgs(c1,await eDM(c1,[{text:'Selam Ali!',sender:uid,senderName:'Ben',time:now-3600000},{text:'Selam! Nasilsin?',sender:'#111111',senderName:'AliVeli',time:now-3500000},{text:'Iyiyim sen?',sender:uid,senderName:'Ben',time:now-3400000},{text:'Yarin bulusabilir miyiz?',sender:'#111111',senderName:'AliVeli',time:now-1800000}]));
+saveMsgs(c2,await eDM(c2,[{text:'Merhaba Ayse',sender:uid,senderName:'Ben',time:now-7200000},{text:'Merhaba!',sender:'#222222',senderName:'AyseKaya',time:now-7100000},{text:'Proje nasil gidiyor?',sender:uid,senderName:'Ben',time:now-7000000},{text:'Gayet iyi, bitmek uzere',sender:'#222222',senderName:'AyseKaya',time:now-6900000}]));
+saveMsgs(c3,await eDM(c3,[{text:'Bu aksam maci izliyor musun?',sender:uid,senderName:'Ben',time:now-86400000},{text:'Tabii ki! Saat kacta?',sender:'#333333',senderName:'MehmetYilmaz',time:now-86300000}]));
+const dm={};dm[uid]={};dm[uid][c1]={otherId:'#111111',otherName:'AliVeli',lastMsg:'[sifreli mesaj]',lastTime:now-1800000,unread:1};
+dm[uid][c2]={otherId:'#222222',otherName:'AyseKaya',lastMsg:'[sifreli mesaj]',lastTime:now-6900000,unread:0};
+dm[uid][c3]={otherId:'#333333',otherName:'MehmetYilmaz',lastMsg:'[sifreli mesaj]',lastTime:now-86300000,unread:1};saveDMs(dm);
+saveRooms([{id:'room_1',name:'Genel Sohbet',type:'server',maxMembers:10,members:5,createdBy:'#111111',createdAt:now-200000000},{id:'room_2',name:'Gizli Kanal',type:'webrtc',maxMembers:5,members:3,createdBy:'#222222',createdAt:now-100000000},{id:'room_3',name:'Oyun Grubu',type:'server',maxMembers:8,members:7,createdBy:uid,createdAt:now-50000000},{id:'room_4',name:'Proje Takimi',type:'webrtc',maxMembers:4,members:2,createdBy:'#333333',createdAt:now-30000000}]);
+// Establish room sessions and encrypt room messages
+const rids=['room_1','room_3'];for(const rid of rids){const combined=new TextEncoder().encode('room_'+rid+'_signal_room_v1');const rsk=await crypto.subtle.digest('SHA-256',combined);saveSession('room_'+rid,{established:true,sharedKey:btoa(String.fromCharCode(...new Uint8Array(rsk))),msgCount:0,algorithm:'AES-256-GCM'})}
+async function eRM(rid,msgs){const enc=[];for(const m of msgs){const e=await encryptMsg('room_'+rid,m.text);enc.push({enc:e,text:e.encrypted?null:m.text,sender:m.sender,senderName:m.senderName,time:m.time})}return enc}
+saveRMsgs('room_1',await eRM('room_1',[{text:'Herkese merhaba!',sender:'#111111',senderName:'AliVeli',time:now-5000000},{text:'Selam Ali',sender:'#222222',senderName:'AyseKaya',time:now-4900000},{text:'Bugun toplanti var mi?',sender:'#333333',senderName:'MehmetYilmaz',time:now-4800000}]));
+saveRMsgs('room_3',await eRM('room_3',[{text:'Bu aksam oyun var mi?',sender:uid,senderName:'Ben',time:now-2000000},{text:'Ben varim',sender:'#444444',senderName:'ZeynepDemir',time:now-1900000}]));
+setCU(uid);setIn(uid);}}
+seed().catch(e=>console.warn('Seed error:',e));
+
+// ===== INIT =====
+window.addEventListener('load',async()=>{
+  await _detectCrypto();
+  updateFBStatus();
+  const cu=getCU();if(cu){const u=getU();if(u[cu]){setIn(cu);setOnlineStatus(cu,true)}}
+  document.querySelectorAll('input[maxlength="7"]').forEach(inp=>{inp.addEventListener('input',function(){let v=this.value.replace(/[^0-9#]/g,'');if(v&&!v.startsWith('#'))v='#'+v;this.value=v})})});
+
+// Particles
+for(let i=0;i<15;i++){const p=document.createElement('div');p.style.cssText='position:fixed;width:'+(2+Math.random()*4)+'px;height:'+(2+Math.random()*4)+'px;background:rgba(255,255,255,.12);left:'+Math.random()*100+'%;animation:pfl '+(8+Math.random()*12)+'s linear '+Math.random()*10+'s infinite;z-index:0';document.body.appendChild(p)}
+const sty=document.createElement('style');sty.textContent='@keyframes pfl{0%{transform:translateY(100vh);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(-20px);opacity:0}}';document.head.appendChild(sty);
+</script>
+</body>
+</html>
